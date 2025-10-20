@@ -1,102 +1,184 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [mode, setMode] = useState<"job" | "manual">("job");
+  const [jobDescription, setJobDescription] = useState("");
+  const [suggestions, setSuggestions] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const [resumeData, setResumeData] = useState({
+    experience: [""],
+    education: [""],
+    skills: [""],
+    summary: [""],
+  });
+
+  const handleAdd = (field: keyof typeof resumeData) => {
+    setResumeData({ ...resumeData, [field]: [...resumeData[field], ""] });
+  };
+
+  const handleChange = (
+    field: keyof typeof resumeData,
+    index: number,
+    value: string,
+  ) => {
+    const updated = [...resumeData[field]];
+    updated[index] = value;
+    setResumeData({ ...resumeData, [field]: updated });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mode === "job") {
+      setSuggestions(
+        "Suggested keywords:\n• React.js  • TypeScript  • AWS\n\nSample Summary:\nSoftware engineer experienced in full-stack web development and cloud deployment.",
+      );
+    } else {
+      setSuggestions(
+        `Generated Resume Outline:\n\n` +
+          `Experience:\n${resumeData.experience.join("\n- ")}\n\n` +
+          `Education:\n${resumeData.education.join("\n- ")}\n\n` +
+          `Skills:\n${resumeData.skills.join(", ")}\n\n` +
+          `Summary:\n${resumeData.summary.join("\n")}`,
+      );
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
+      {/* ─── Header ───────────────────────────────────────────── */}
+      <header className="flex items-center justify-between bg-white px-8 py-4 shadow-sm">
+        <h1 className="text-2xl font-bold text-blue-700">Resume Advisor</h1>
+        <div className="flex gap-4">
+          <Link
+            href="/login"
+            className="text-sm font-medium text-blue-600 hover:underline"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Sign In
+          </Link>
+          <Link
+            href="/signup"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-blue-700"
           >
-            Read our docs
-          </a>
+            Sign Up
+          </Link>
+        </div>
+      </header>
+
+      {/* ─── Main ──────────────────────────────────────────────── */}
+      <main className="flex flex-1 flex-col items-center px-4 py-10">
+        <div className="w-full max-w-3xl rounded-xl bg-white p-8 shadow-lg">
+          {/* Toggle Mode */}
+          <div className="mb-8 flex justify-center">
+            <button
+              onClick={() => setMode("job")}
+              className={`rounded-l-lg border px-6 py-2 ${
+                mode === "job"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              Paste Job Description
+            </button>
+            <button
+              onClick={() => setMode("manual")}
+              className={`rounded-r-lg border px-6 py-2 ${
+                mode === "manual"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              Enter Resume Details
+            </button>
+          </div>
+
+          {/* Job Mode */}
+          {mode === "job" && (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+              <div>
+                <label
+                  htmlFor="jobDescription"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Paste Job Description or Link
+                </label>
+                <textarea
+                  id="jobDescription"
+                  placeholder="e.g. Software Engineer at Google — React, Next.js, AWS…"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  className="min-h-[120px] w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="self-center rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-all hover:bg-blue-700"
+              >
+                Generate Suggestions
+              </button>
+            </form>
+          )}
+
+          {/* Manual Mode */}
+          {mode === "manual" && (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+              {Object.keys(resumeData).map((sectionKey) => {
+                const field = sectionKey as keyof typeof resumeData;
+                return (
+                  <div key={field}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-sm font-medium capitalize">
+                        {field}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleAdd(field)}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        + Add New
+                      </button>
+                    </div>
+
+                    {resumeData[field].map((value, i) => (
+                      <textarea
+                        key={i}
+                        value={value}
+                        onChange={(e) => handleChange(field, i, e.target.value)}
+                        placeholder={`Enter ${field} #${i + 1}`}
+                        className="mb-3 min-h-[80px] w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+
+              <button
+                type="submit"
+                className="self-center rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-all hover:bg-blue-700"
+              >
+                Generate Resume
+              </button>
+            </form>
+          )}
+
+          {/* Suggestions */}
+          {suggestions && (
+            <div className="mt-8">
+              <h2 className="mb-2 text-xl font-semibold">AI Suggestions</h2>
+              <pre className="whitespace-pre-wrap rounded-lg bg-gray-100 p-4">
+                {suggestions}
+              </pre>
+            </div>
+          )}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* ─── Footer ───────────────────────────────────────────── */}
+      <footer className="py-4 text-center text-sm text-gray-500">
+        © {new Date().getFullYear()} Resume Advisor
       </footer>
     </div>
   );
