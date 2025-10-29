@@ -5,6 +5,7 @@ export interface Education {
   location: string;
   datesAttended: string;
   coursework?: string;
+  order?: number;
 }
 
 export interface Experience {
@@ -13,7 +14,8 @@ export interface Experience {
   company: string;
   location: string;
   dates: string;
-  achievements: string;
+  description: string;
+  order?: number;
 }
 
 export interface Project {
@@ -22,6 +24,7 @@ export interface Project {
   technologies: string;
   date: string;
   description: string;
+  order?: number;
 }
 
 export interface Leadership {
@@ -29,7 +32,8 @@ export interface Leadership {
   role: string;
   organization: string;
   dates: string;
-  achievements: string;
+  description: string;
+  order?: number;
 }
 
 export interface TechnicalSkills {

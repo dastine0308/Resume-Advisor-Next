@@ -1,11 +1,14 @@
 import React from "react";
 import { IconButton } from "@/components/ui/IconButton";
+import { ArrowUpIcon, ArrowDownIcon, Cross2Icon } from "@radix-ui/react-icons";
 
 interface SectionCardProps {
   title: string;
   children: React.ReactNode;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  disableMoveUp?: boolean;
+  disableMoveDown?: boolean;
   onDelete?: () => void;
   showControls?: boolean;
 }
@@ -15,6 +18,8 @@ export const SectionCard: React.FC<SectionCardProps> = ({
   children,
   onMoveUp,
   onMoveDown,
+  disableMoveUp,
+  disableMoveDown,
   onDelete,
   showControls = true,
 }) => {
@@ -26,19 +31,21 @@ export const SectionCard: React.FC<SectionCardProps> = ({
         {showControls && (
           <div className="flex gap-2">
             <IconButton
-              icon="↑"
+              icon={<ArrowUpIcon />}
               onClick={onMoveUp}
+              disabled={disableMoveUp}
               aria-label="Move up"
               size="md"
             />
             <IconButton
-              icon="↓"
+              icon={<ArrowDownIcon />}
               onClick={onMoveDown}
+              disabled={disableMoveDown}
               aria-label="Move down"
               size="md"
             />
             <IconButton
-              icon="✕"
+              icon={<Cross2Icon />}
               onClick={onDelete}
               aria-label="Delete"
               size="md"

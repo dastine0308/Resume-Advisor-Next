@@ -6,7 +6,7 @@ interface NavigationProps {
 
 export const Navigation: React.FC<NavigationProps> = ({ onBack }) => {
   return (
-    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-4 md:px-5">
+    <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-4 md:px-5">
       <div className="flex items-center">
         <span className="text-base font-bold text-indigo-500 md:text-lg">
           📋 Resume Advisor
