@@ -207,7 +207,7 @@ export default function ContentBuilderPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-gradient-to-r from-gray-50 to-gray-50">
+    <div className="relative min-h-screen bg-gray-100">
       {/* Navigation */}
       <Navigation onBack={() => window.history.back()} />
 
@@ -218,10 +218,10 @@ export default function ContentBuilderPage() {
         label="Step 2 of 2 - Content Building"
       />
 
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col items-start justify-center overflow-hidden lg:flex-row">
+      {/* Main Content container */}
+      <div className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col items-start gap-6 px-4 py-6 lg:flex-row">
         {/* Left Panel - Form */}
-        <div className="h-auto w-full overflow-auto border-gray-200 bg-white lg:h-[780px] lg:w-[720px] lg:border-r">
+        <div className="w-full overflow-auto bg-white lg:h-[780px] lg:w-[720px] lg:rounded-lg lg:shadow-sm">
           <Breadcrumb items={breadcrumbItems} />
 
           <div className="space-y-4 p-4 md:space-y-6 md:p-6">
@@ -529,8 +529,8 @@ export default function ContentBuilderPage() {
         </div>
 
         {/* Right Panel - Preview (hidden on mobile) */}
-        <div className="hidden h-[780px] w-[720px] overflow-auto bg-white lg:block">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-gray-50 px-5 py-4">
+        <div className="hidden overflow-auto bg-white lg:block lg:h-[780px] lg:w-[520px] lg:rounded-lg lg:shadow-sm">
+          <div className="sticky top-4 z-10 flex items-center justify-between border-b border-gray-200 bg-gray-50 px-5 py-4">
             <h3 className="text-sm font-bold text-gray-800">Live Preview</h3>
             <Button variant="outline" size="sm">
               ↓ Download PDF

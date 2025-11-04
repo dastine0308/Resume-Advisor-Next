@@ -11,20 +11,20 @@ interface BreadcrumbProps {
 
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items }) => {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-4 py-4 md:px-5">
+    <div className="flex items-center gap-3 bg-white px-4 py-4 md:px-5">
       {items.map((item, index) => (
         <React.Fragment key={index}>
           <button
-            className={`text-[11px] transition-colors md:text-xs ${
+            className={`text-[12px] transition-colors md:text-sm ${
               item.active
-                ? "font-normal text-gray-800"
-                : "font-normal text-indigo-500 hover:text-indigo-600"
+                ? "font-medium text-gray-800"
+                : "font-medium text-indigo-600 hover:text-indigo-700"
             }`}
           >
             {item.label}
           </button>
           {index < items.length - 1 && (
-            <span className="text-[10.5px] text-gray-400">/</span>
+            <span className="text-sm text-gray-300">/</span>
           )}
         </React.Fragment>
       ))}

@@ -1,101 +1,116 @@
 "use client";
 
-import { useAuth } from "../../hooks/useAuth";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function SignupPage() {
-  const { signIn } = useAuth();
+export default function SignUpPage() {
   const router = useRouter();
+  const [form, setForm] = useState({ email: "", password: "", confirmPassword: "" });
+  const [error, setError] = useState("");
 
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Pretend account created successfully
-    signIn();
-    router.push("/");
+    setError("");
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    // Move to step 2 of signup flow
+    const encoded = encodeURIComponent(form.email || "");
+    router.push(`/accountCreation?email=${encoded}`);
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-6 text-center text-3xl font-bold text-blue-700">
-          Resume Advisor
-        </h1>
-        <h2 className="mb-4 text-center text-xl font-semibold">Sign Up</h2>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
+      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-md">
+        {/* Header */}
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-blue-600 md:text-3xl"> 
+            Sign Up
+          </h1>
+          <p className="mt-2 text-gray-600">
+            Create your account to get AI-powered resume help
+          </p>
+        </div>
 
-        <form onSubmit={handleSignup} className="flex flex-col gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="name">
-              Full Name
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              placeholder="Jane Doe"
-              value={form.name}
-              onChange={handleChange}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+        {/* Step Indicator */}
+        <div className="mb-8 flex items-center justify-center space-x-4">
+          <div className="flex flex-col items-center">
+            <span className="text-sm font-medium text-blue-600">Sign Up</span>
+            <div className="mt-1 h-1.5 w-12 rounded-full bg-blue-600" />
           </div>
+          <div className="h-0.5 w-10 bg-gray-300" />
+          <div className="flex flex-col items-center">
+            <span className="text-sm font-medium text-gray-400">Profile Setup</span>
+            <div className="mt-1 h-1.5 w-12 rounded-full bg-gray-300" />
+          </div>
+        </div>
 
+  {/* Form */}
+  <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Email */}
           <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
+            <label className="block text-sm font-medium text-gray-700" htmlFor="email">
               Email
             </label>
             <input
               id="email"
-              name="email"
               type="email"
               placeholder="you@example.com"
               value={form.email}
-              onChange={handleChange}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-indigo-500"
               required
             />
           </div>
 
+          {/* Password */}
           <div>
-            <label
-              className="mb-1 block text-sm font-medium"
-              htmlFor="password"
-            >
+            <label className="block text-sm font-medium text-gray-700" htmlFor="password">
               Password
             </label>
             <input
               id="password"
-              name="password"
               type="password"
-              placeholder="••••••••"
+              placeholder="********"
               value={form.password}
-              onChange={handleChange}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-indigo-500"
               required
             />
           </div>
 
+          {/* Confirm Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="confirmPassword">
+              Confirm Password
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              placeholder="********"
+              value={form.confirmPassword}
+              onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-indigo-500"
+              required
+            />
+          </div>
+
+          {/* Submit */}
           <button
             type="submit"
-            className="rounded-lg bg-blue-600 py-3 font-semibold text-white transition-all hover:bg-blue-700"
+            className="w-full rounded-md bg-gradient-to-r from-pink-500 to-indigo-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
           >
-            Create Account
+            Continue to profile setup
           </button>
+          {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        {/* Footer */}
+        <p className="mt-6 text-center text-sm text-gray-500">
           Already have an account?{" "}
-          <Link
-            href="/login"
-            className="font-medium text-blue-600 hover:underline"
-          >
+          <Link href="/login" className="font-medium text-indigo-600 hover:underline">
             Log in
           </Link>
         </p>

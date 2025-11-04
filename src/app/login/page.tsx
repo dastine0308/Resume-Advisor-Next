@@ -11,69 +11,92 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pretend validation passed
+
+    // Basic mock validation (replace with API later)
+    if (!email || !password) {
+      setError("Please fill out all fields.");
+      return;
+    }
+
+    setError("");
     signIn();
     router.push("/"); // redirect to main app
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-6 text-center text-3xl font-bold text-blue-700">
-          Resume Advisor
-        </h1>
-        <h2 className="mb-4 text-center text-xl font-semibold">Login</h2>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
+      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-md">
+        {/* Header */}
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-blue-600 md:text-3xl">
+            Log In
+          </h1>
+          <p className="mt-2 text-gray-600">Welcome back to Resume Advisor</p>
+        </div>
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        {/* Form */}
+        <form onSubmit={handleLogin} className="space-y-5">
+          {/* Email */}
           <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700"
+            >
               Email
             </label>
             <input
-              id="email"
               type="email"
+              id="email"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-indigo-500"
               required
             />
           </div>
 
+          {/* Password */}
           <div>
             <label
-              className="mb-1 block text-sm font-medium"
               htmlFor="password"
+              className="block text-sm font-medium text-gray-700"
             >
               Password
             </label>
             <input
-              id="password"
               type="password"
-              placeholder="••••••••"
+              id="password"
+              placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-indigo-500"
               required
             />
           </div>
 
+          {error && (
+            <p className="text-sm text-red-600">{error}</p>
+          )}
+
+          {/* Submit */}
           <button
             type="submit"
-            className="rounded-lg bg-blue-600 py-3 font-semibold text-white transition-all hover:bg-blue-700"
+            className="w-full rounded-md bg-gradient-to-r from-pink-500 to-indigo-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
           >
             Sign In
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        {/* Footer */}
+        <p className="mt-6 text-center text-sm text-gray-500">
           Don’t have an account?{" "}
           <Link
             href="/signup"
-            className="font-medium text-blue-600 hover:underline"
+            className="font-medium text-indigo-600 hover:underline"
           >
             Sign up
           </Link>
