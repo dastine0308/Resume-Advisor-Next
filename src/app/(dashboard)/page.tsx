@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button, DashboardCard, Tabs } from "@/components/ui";
+import { useTheme } from "@/app/providers/themeProvider";
 
 const mockData = {
   totalResumes: 3,
@@ -42,6 +43,7 @@ const mockData = {
 };
 
 export default function DashboardPage() {
+  const { darkMode, toggleDarkMode } = useTheme();
   const { isSignedIn, signOut, loaded } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("all");
