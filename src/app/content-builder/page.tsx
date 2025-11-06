@@ -434,7 +434,7 @@ export default function ContentBuilderPage() {
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-gradient-to-r from-gray-50 to-gray-50">
       {/* Navigation */}
-      <Navigation onBack={() => window.history.back()} />
+      <Navigation />
 
       {/* Progress Bar */}
       <ProgressBar
