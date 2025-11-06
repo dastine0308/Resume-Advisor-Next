@@ -122,10 +122,12 @@ src/
 │       ├── FormField.tsx      # Form field wrapper
 │       └── index.ts           # Resume components exports
 ├── types/
-│   └── resume.ts              # TypeScript type definitions
+│   ├── resume.ts              # TypeScript type definitions
+│   └── job-description.ts     # TypeScript type definitions
 ├── hooks/
 │   ├── useResumeForm.ts       # Custom hook for form state
 │   ├── usePDFGeneration.ts    # Custom hook for PDF generation
+│   ├── useJobDescription.ts   # Custom hook for form state management
 │   └── index.ts               # Hooks exports
 ├── lib/
 │   ├── latex-client.ts        # LaTeX service client
@@ -134,9 +136,13 @@ src/
     ├── content-builder/
     │   ├── page.tsx           # Resume builder main page
     │   └── fake_resume_data.json
+    ├── job-description/
+│   │   └── page.tsx           # Main page component
     ├── api/
-    │   └── compile-latex/
-    │       └── route.ts       # LaTeX compilation API endpoint
+    │   ├── compile-latex/
+    │   │   └── route.ts       # LaTeX compilation API endpoint
+    │   └── analyze-job-description/
+    │        └── route.ts      # API endpoint for analysis
     ├── login/
     │   └── page.tsx           # Login page
     ├── signup/
