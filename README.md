@@ -123,11 +123,16 @@ src/
 │       └── index.ts           # Resume components exports
 ├── types/
 │   ├── resume.ts              # TypeScript type definitions
-│   └── job-description.ts     # TypeScript type definitions
+│   ├── job-description.ts     # Job description type definitions
+│   └── keywords.ts            # Keywords type definitions
+├── stores/
+│   ├── useKeywordsStore.ts    # Zustand store for keywords state
+│   └── index.ts               # Store exports
 ├── hooks/
 │   ├── useResumeForm.ts       # Custom hook for form state
 │   ├── usePDFGeneration.ts    # Custom hook for PDF generation
 │   ├── useJobDescription.ts   # Custom hook for form state management
+│   ├── useKeywordsSelection.ts # Custom hook for keywords selection
 │   └── index.ts               # Hooks exports
 ├── lib/
 │   ├── latex-client.ts        # LaTeX service client
@@ -137,7 +142,9 @@ src/
     │   ├── page.tsx           # Resume builder main page
     │   └── fake_resume_data.json
     ├── job-description/
-│   │   └── page.tsx           # Main page component
+    │   └── page.tsx           # Job description input page
+    ├── keywords-selection/
+    │   └── page.tsx           # Keywords selection page
     ├── api/
     │   ├── compile-latex/
     │   │   └── route.ts       # LaTeX compilation API endpoint
@@ -200,6 +207,37 @@ Domain-specific components for resume building:
 - **SectionCard**: Container for resume sections with controls
 - **FormField**: Unified form field wrapper
 
+## 🗄️ State Management with Zustand
+
+The application uses **[Zustand](https://github.com/pmndrs/zustand)** for state management, providing a simple and efficient way to manage global state without the boilerplate of Redux.
+
+### Keywords Store (`stores/useKeywordsStore.ts`)
+
+The keywords store manages the state for job description analysis and keyword selection:
+
+#### Store Structure
+
+```typescript
+interface KeywordsStore {
+  jobId: string;                    // Current job description ID
+  keywordsData: Keyword[];          // All available keywords
+  selectedKeywords: Keyword[];      // User-selected keywords
+
+  // Actions
+  setJobId: (id: string) => void;
+  setKeywordsData: (data: Keyword[]) => void;
+  toggleKeyword: (id: string) => void;
+  resetKeywords: () => void;
+  updateSelectedKeywords: () => void;
+}
+```
+
+#### Features
+
+- **Persistence**: Uses `zustand/middleware` persist to save state to localStorage
+- **Automatic Updates**: Selected keywords are automatically updated when toggled
+- **Type Safety**: Full TypeScript support with typed actions and state
+
 ## 🎨 Design Principles
 
 1. **Component Decoupling**: UI components are independent and reusable
@@ -214,6 +252,7 @@ Domain-specific components for resume building:
 - **Framework**: [Next.js 14+](https://nextjs.org/) with App Router
 - **Language**: [TypeScript](https://www.typescriptlang.org/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
 - **UI Components**: Custom-built with React
 - **Font**: [Geist Font Family](https://vercel.com/font)
 - **PDF Generation**: LaTeX with custom microservice
