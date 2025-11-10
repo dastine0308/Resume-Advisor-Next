@@ -41,6 +41,19 @@ fi
 
 echo -e "${GREEN}✓ Docker and Docker Compose are installed${NC}"
 
+# Check and setup Docker Buildx if using docker compose (V2)
+if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
+    echo -e "${YELLOW}Checking Docker Buildx...${NC}"
+    if ! docker buildx version &> /dev/null; then
+        echo -e "${YELLOW}Docker Buildx not found. Creating buildx builder...${NC}"
+        docker buildx create --name builder --use 2>/dev/null || true
+        docker buildx inspect --bootstrap 2>/dev/null || true
+    else
+        # Ensure default builder exists
+        docker buildx inspect --bootstrap 2>/dev/null || docker buildx create --name builder --use 2>/dev/null || true
+    fi
+fi
+
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
@@ -75,10 +88,38 @@ fi
 
 # Build and start the service
 echo -e "${YELLOW}Building LaTeX service image...${NC}"
-$DOCKER_COMPOSE -f docker-compose.latex.yml build --no-cache
+BUILD_SUCCESS=false
+if $DOCKER_COMPOSE -f docker-compose.latex.yml build --no-cache; then
+    BUILD_SUCCESS=true
+    echo -e "${YELLOW}Starting LaTeX service...${NC}"
+    $DOCKER_COMPOSE -f docker-compose.latex.yml up -d
+else
+    echo -e "${YELLOW}Build failed with docker compose. Trying alternative build method...${NC}"
+    # Fallback: build image directly with docker build
+    if docker build -f Dockerfile.latex -t resume-advisor-next-latex-service . --no-cache; then
+        BUILD_SUCCESS=true
+        # Create network if it doesn't exist
+        docker network create latex-network 2>/dev/null || true
+        # Stop and remove existing container if any
+        docker stop latex-service 2>/dev/null || true
+        docker rm latex-service 2>/dev/null || true
+        # Start service with docker run
+        echo -e "${YELLOW}Starting LaTeX service with docker run...${NC}"
+        docker run -d \
+            --name latex-service \
+            -p 3002:3002 \
+            -e NODE_ENV=production \
+            -e PORT=3002 \
+            --restart unless-stopped \
+            --network latex-network \
+            resume-advisor-next-latex-service
+    fi
+fi
 
-echo -e "${YELLOW}Starting LaTeX service...${NC}"
-$DOCKER_COMPOSE -f docker-compose.latex.yml up -d
+if [ "$BUILD_SUCCESS" = false ]; then
+    echo -e "${RED}✗ Failed to build LaTeX service image${NC}"
+    exit 1
+fi
 
 # Wait for service to be healthy
 echo -e "${YELLOW}Waiting for service to be healthy...${NC}"
