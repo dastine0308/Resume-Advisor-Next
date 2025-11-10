@@ -14,10 +14,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy package files
-COPY latex-service/package*.json ./
+COPY latex-service/package.json ./
+COPY latex-service/package-lock.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy service code
 COPY latex-service/ .
