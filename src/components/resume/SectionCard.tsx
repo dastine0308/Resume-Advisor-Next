@@ -31,25 +31,24 @@ export const SectionCard: React.FC<SectionCardProps> = ({
         {showControls && (
           <div className="flex gap-2">
             <IconButton
-              icon={<ArrowUpIcon />}
               onClick={onMoveUp}
               disabled={disableMoveUp}
               aria-label="Move up"
               size="md"
-            />
+            >
+              <ArrowUpIcon />
+            </IconButton>
             <IconButton
-              icon={<ArrowDownIcon />}
               onClick={onMoveDown}
               disabled={disableMoveDown}
               aria-label="Move down"
               size="md"
-            />
-            <IconButton
-              icon={<Cross2Icon />}
-              onClick={onDelete}
-              aria-label="Delete"
-              size="md"
-            />
+            >
+              <ArrowDownIcon />
+            </IconButton>
+            <IconButton onClick={onDelete} aria-label="Delete" size="md">
+              <Cross2Icon />
+            </IconButton>
           </div>
         )}
       </div>
