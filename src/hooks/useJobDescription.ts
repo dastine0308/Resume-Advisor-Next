@@ -69,14 +69,14 @@ export const useJobDescription = (): UseJobDescriptionReturn => {
     } finally {
       setIsLoading(false);
     }
-  }, [jobDescription, jobUrl]);
+  }, [jobDescription, jobUrl, router]);
 
   const handleCancel = useCallback(() => {
     setJobDescription("");
     setJobUrl("");
     setError(null);
     router.push("/");
-  }, []);
+  }, [router]);
 
   const isFormValid = jobDescription.trim() !== "" || jobUrl.trim() !== "";
 

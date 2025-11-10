@@ -4,7 +4,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { IconButton } from "@/components/ui/IconButton";
 import { UserDropdown } from "@/components/ui/UserDropdown";
-import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
+import { MoonIcon } from "@radix-ui/react-icons";
 
 export const Navigation: React.FC = () => {
   const router = useRouter();
