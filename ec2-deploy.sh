@@ -97,6 +97,41 @@ if [ -d ".git" ]; then
     git pull || echo -e "${YELLOW}Warning: Could not pull latest code${NC}"
 fi
 
+# Check disk space and clean up Docker resources if needed
+echo -e "${YELLOW}Checking disk space...${NC}"
+DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+echo "Current disk usage: ${DISK_USAGE}%"
+
+# Clean up Docker resources to free up space
+echo -e "${YELLOW}Cleaning up Docker resources...${NC}"
+
+# Remove stopped containers
+echo "  - Removing stopped containers..."
+docker container prune -f 2>/dev/null || true
+
+# Remove unused images (except the one we're about to pull)
+echo "  - Removing unused images..."
+docker image prune -a -f 2>/dev/null || true
+
+# Remove unused volumes
+echo "  - Removing unused volumes..."
+docker volume prune -f 2>/dev/null || true
+
+# Remove build cache
+echo "  - Removing build cache..."
+docker builder prune -a -f 2>/dev/null || true
+
+# Show disk usage after cleanup
+DISK_USAGE_AFTER=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+echo -e "${GREEN}✓ Cleanup completed. Disk usage: ${DISK_USAGE_AFTER}%${NC}"
+echo ""
+
+# Check if we have enough space (warn if > 85%)
+if [ "$DISK_USAGE_AFTER" -gt 85 ]; then
+    echo -e "${YELLOW}⚠️  Warning: Disk usage is high (${DISK_USAGE_AFTER}%). Consider expanding the EC2 volume.${NC}"
+    echo ""
+fi
+
 # Pull the Docker image
 REGISTRY_TYPE="Docker Hub"
 if [[ "$DOCKER_IMAGE_NAME" == ghcr.io/* ]]; then
@@ -106,6 +141,19 @@ fi
 echo -e "${YELLOW}Pulling LaTeX service image from $REGISTRY_TYPE...${NC}"
 docker pull "$DOCKER_IMAGE_NAME" || {
     echo -e "${RED}Failed to pull image from $REGISTRY_TYPE${NC}"
+    echo ""
+    echo -e "${YELLOW}Disk space information:${NC}"
+    df -h / | head -2
+    echo ""
+    echo -e "${YELLOW}Docker disk usage:${NC}"
+    docker system df 2>/dev/null || true
+    echo ""
+    echo "Possible solutions:"
+    echo "  1. Expand the EC2 instance volume size"
+    echo "  2. Manually clean up more Docker resources:"
+    echo "     - docker system prune -a --volumes -f"
+    echo "  3. Remove old images manually: docker images"
+    echo ""
     echo "Make sure:"
     if [[ "$DOCKER_IMAGE_NAME" == ghcr.io/* ]]; then
         echo "  1. The image exists on GitHub Container Registry"
