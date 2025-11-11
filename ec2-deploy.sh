@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # EC2 LaTeX Service Deployment Script
-# This script automates the deployment of the LaTeX service to AWS EC2
+# This script pulls the Docker image from GitHub Container Registry and runs it on EC2
+# Note: The image is automatically built and pushed by GitHub Actions when code is pushed to the repository
 
 set -e
 
@@ -59,67 +60,68 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # Check if required files exist
-if [ ! -f "Dockerfile.latex" ]; then
-    echo -e "${RED}Error: Dockerfile.latex not found${NC}"
-    exit 1
-fi
-
 if [ ! -f "docker-compose.latex.yml" ]; then
     echo -e "${RED}Error: docker-compose.latex.yml not found${NC}"
     exit 1
 fi
 
-if [ ! -d "latex-service" ]; then
-    echo -e "${RED}Error: latex-service directory not found${NC}"
-    exit 1
+echo -e "${GREEN}✓ Required files found${NC}"
+
+# Configuration - Set DOCKER_IMAGE_NAME environment variable or modify here
+# For GitHub Container Registry: ghcr.io/username/repo-name/latex-service:latest
+# For Docker Hub: username/resume-advisor-latex:latest
+DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-ghcr.io/your-username/resume-advisor-next/latex-service:latest}"
+
+echo -e "${YELLOW}Configuration:${NC}"
+echo "  Docker Image: $DOCKER_IMAGE_NAME"
+echo ""
+
+# Check if image is from GitHub Container Registry
+if [[ "$DOCKER_IMAGE_NAME" == ghcr.io/* ]]; then
+    echo -e "${YELLOW}Detected GitHub Container Registry image${NC}"
+    echo "If the image is private, make sure you are logged in:"
+    echo "  echo \$GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin"
+    echo ""
 fi
 
-echo -e "${GREEN}✓ Required files found${NC}"
+# Export for docker-compose
+export DOCKER_IMAGE_NAME
 
 # Stop existing service if running
 echo -e "${YELLOW}Stopping existing LaTeX service (if running)...${NC}"
 $DOCKER_COMPOSE -f docker-compose.latex.yml down 2>/dev/null || true
 
-# Pull latest code (if using git)
+# Pull latest code (if using git) - only needed for docker-compose.yml file
 if [ -d ".git" ]; then
     echo -e "${YELLOW}Pulling latest code...${NC}"
     git pull || echo -e "${YELLOW}Warning: Could not pull latest code${NC}"
 fi
 
-# Build and start the service
-echo -e "${YELLOW}Building LaTeX service image...${NC}"
-BUILD_SUCCESS=false
-if $DOCKER_COMPOSE -f docker-compose.latex.yml build --no-cache; then
-    BUILD_SUCCESS=true
-    echo -e "${YELLOW}Starting LaTeX service...${NC}"
-    $DOCKER_COMPOSE -f docker-compose.latex.yml up -d
-else
-    echo -e "${YELLOW}Build failed with docker compose. Trying alternative build method...${NC}"
-    # Fallback: build image directly with docker build
-    if docker build -f Dockerfile.latex -t resume-advisor-next-latex-service . --no-cache; then
-        BUILD_SUCCESS=true
-        # Create network if it doesn't exist
-        docker network create latex-network 2>/dev/null || true
-        # Stop and remove existing container if any
-        docker stop latex-service 2>/dev/null || true
-        docker rm latex-service 2>/dev/null || true
-        # Start service with docker run
-        echo -e "${YELLOW}Starting LaTeX service with docker run...${NC}"
-        docker run -d \
-            --name latex-service \
-            -p 3002:3002 \
-            -e NODE_ENV=production \
-            -e PORT=3002 \
-            --restart unless-stopped \
-            --network latex-network \
-            resume-advisor-next-latex-service
-    fi
+# Pull the Docker image
+REGISTRY_TYPE="Docker Hub"
+if [[ "$DOCKER_IMAGE_NAME" == ghcr.io/* ]]; then
+    REGISTRY_TYPE="GitHub Container Registry"
 fi
 
-if [ "$BUILD_SUCCESS" = false ]; then
-    echo -e "${RED}✗ Failed to build LaTeX service image${NC}"
+echo -e "${YELLOW}Pulling LaTeX service image from $REGISTRY_TYPE...${NC}"
+docker pull "$DOCKER_IMAGE_NAME" || {
+    echo -e "${RED}Failed to pull image from $REGISTRY_TYPE${NC}"
+    echo "Make sure:"
+    if [[ "$DOCKER_IMAGE_NAME" == ghcr.io/* ]]; then
+        echo "  1. The image exists on GitHub Container Registry"
+        echo "  2. You have access to the image (if private)"
+        echo "  3. You are logged in: echo \$GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin"
+    else
+        echo "  1. The image exists on Docker Hub"
+        echo "  2. You have access to the image (if private)"
+        echo "  3. You are logged in: docker login"
+    fi
     exit 1
-fi
+}
+
+# Start the service
+echo -e "${YELLOW}Starting LaTeX service...${NC}"
+$DOCKER_COMPOSE -f docker-compose.latex.yml up -d
 
 # Wait for service to be healthy
 echo -e "${YELLOW}Waiting for service to be healthy...${NC}"

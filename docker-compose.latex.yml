@@ -1,8 +1,13 @@
 services:
   latex-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.latex
+    # Use image from Docker Hub or GitHub Container Registry instead of building locally
+    # Set DOCKER_IMAGE_NAME environment variable or uncomment and set the image below
+    # For GitHub Container Registry: ghcr.io/username/repo-name/latex-service:latest
+    # For Docker Hub: username/resume-advisor-latex:latest
+    image: ${DOCKER_IMAGE_NAME:-ghcr.io/your-username/resume-advisor-next/latex-service:latest}
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.latex
     ports:
       - "3002:3002"
     environment:

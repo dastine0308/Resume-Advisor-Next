@@ -1,0 +1,63 @@
+name: Deploy LaTeX Service to EC2
+
+on:
+  workflow_run:
+    workflows: ["Build and Push LaTeX Service"]
+    types:
+      - completed
+  workflow_dispatch: # 允許手動觸發
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy (default: latest)"
+        required: false
+        default: "latest"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/latex-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          IMAGE_TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+          FULL_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag || 'latest' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY: ${{ env.REGISTRY }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+            # 導出環境變數
+            export DOCKER_IMAGE_NAME="$FULL_IMAGE_NAME"
+            
+            # 進入項目目錄
+            cd ~/Resume-Advisor-Next || cd /opt/resume-advisor || exit 1
+            
+            # 拉取最新代碼（如果需要更新 docker-compose.latex.yml）
+            git pull || true
+            
+            # 登入 GitHub Container Registry
+            echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+            
+            # 執行部署腳本
+            ./ec2-deploy.sh
+          EOF
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          curl -f http://${{ secrets.EC2_HOST }}:3002/health || exit 1
