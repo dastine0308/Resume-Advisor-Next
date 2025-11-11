@@ -42,6 +42,19 @@ fi
 
 echo -e "${GREEN}✓ Docker and Docker Compose are installed${NC}"
 
+# Check and setup Docker Buildx if using docker compose (V2)
+if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
+    echo -e "${YELLOW}Checking Docker Buildx...${NC}"
+    if ! docker buildx version &> /dev/null; then
+        echo -e "${YELLOW}Docker Buildx not found. Creating buildx builder...${NC}"
+        docker buildx create --name builder --use 2>/dev/null || true
+        docker buildx inspect --bootstrap 2>/dev/null || true
+    else
+        # Ensure default builder exists
+        docker buildx inspect --bootstrap 2>/dev/null || docker buildx create --name builder --use 2>/dev/null || true
+    fi
+fi
+
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
