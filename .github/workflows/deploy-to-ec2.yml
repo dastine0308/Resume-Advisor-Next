@@ -14,7 +14,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/latex-service
 
 jobs:
   deploy:
@@ -24,6 +23,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        id: image-name
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=$REPO_LOWER/latex-service" >> $GITHUB_ENV
+          echo "image_name=$REPO_LOWER/latex-service" >> $GITHUB_OUTPUT
 
       - name: Configure SSH
         run: |

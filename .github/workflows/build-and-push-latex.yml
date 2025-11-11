@@ -6,21 +6,20 @@ on:
       - main
       - master
     paths:
-      - 'Dockerfile.latex'
-      - 'latex-service/**'
-      - '.github/workflows/build-and-push-latex.yml'
+      - "Dockerfile.latex"
+      - "latex-service/**"
+      - ".github/workflows/build-and-push-latex.yml"
   pull_request:
     branches:
       - main
       - master
     paths:
-      - 'Dockerfile.latex'
-      - 'latex-service/**'
+      - "Dockerfile.latex"
+      - "latex-service/**"
   workflow_dispatch: # 允許手動觸發
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/latex-service
 
 jobs:
   build-and-push:
@@ -32,6 +31,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        id: image-name
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=$REPO_LOWER/latex-service" >> $GITHUB_ENV
+          echo "image_name=$REPO_LOWER/latex-service" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -76,4 +82,3 @@ jobs:
           echo ""
           echo "To use on EC2, set:"
           echo "export DOCKER_IMAGE_NAME=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
