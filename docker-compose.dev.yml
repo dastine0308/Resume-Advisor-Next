@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - LATEX_SERVICE_URL=http://latex-service:80
+    volumes:
+      # onMount source code for hot reloading
+      - .:/app
+      # Avoid overwriting node_modules
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - latex-service
+    restart: unless-stopped
+    networks:
+      - resume-advisor-network
+    command: npm run dev
+
+  latex-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.latex
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=development
+      - PORT=80
+    volumes:
+      - ./latex-service:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - resume-advisor-network
+
+networks:
+  resume-advisor-network:
+    driver: bridge

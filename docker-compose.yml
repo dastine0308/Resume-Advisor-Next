@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - LATEX_SERVICE_URL=http://latex-service:80
+    depends_on:
+      - latex-service
+    restart: unless-stopped
+    networks:
+      - resume-advisor-network
+
+  latex-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.latex
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=production
+      - PORT=80
+    restart: unless-stopped
+    networks:
+      - resume-advisor-network
+
+networks:
+  resume-advisor-network:
+    driver: bridge

@@ -1,4 +1,12 @@
 {
+  "personalInfo": {
+    "name": "First Last",
+    "address": "123 Street Name, Town, State 12345",
+    "phone": "123-456-7890",
+    "email": "email@gmail.com",
+    "linkedin": "linkedin.com/in/username",
+    "github": "github.com/username"
+  },
   "education": [
     {
       "id": "1",
@@ -16,7 +24,7 @@
       "company": "Electronics Company",
       "location": "City, State",
       "dates": "May 2020 – August 2020",
-      "achievements": "• Developed a service to automatically perform a set of unit tests daily on a product in development in order to decrease time needed for team members to identify and fix bugs/issues.\n• Incorporated scripts using Python and PowerShell to aggregate XML test results into an organized format and to load the latest build code onto the hardware, so that daily testing can be performed.\n• Utilized Jenkins to provide a continuous integration service in order to automate the entire process of loading the latest build code and test files, running the tests, and generating a report of the results once per day.\n• Explored ways to visualize and send a daily report of test results to team members using HTML, Javascript, and CSS."
+      "description": "• Developed a service to automatically perform a set of unit tests daily on a product in development in order to decrease time needed for team members to identify and fix bugs/issues.\n• Incorporated scripts using Python and PowerShell to aggregate XML test results into an organized format and to load the latest build code onto the hardware, so that daily testing can be performed.\n• Utilized Jenkins to provide a continuous integration service in order to automate the entire process of loading the latest build code and test files, running the tests, and generating a report of the results once per day.\n• Explored ways to visualize and send a daily report of test results to team members using HTML, Javascript, and CSS."
     },
     {
       "id": "2",
@@ -24,7 +32,7 @@
       "company": "Startup, Inc",
       "location": "City, State",
       "dates": "May 2019 – August 2019",
-      "achievements": "• Assisted in development of the front end of a mobile application for iOS/Android using Dart and the Flutter framework.\n• Worked with Google Firebase to manage user inputted data across multiple platforms including web and mobile apps.\n• Collaborated with team members using version control systems such as Git to organize modifications and assign tasks.\n• Utilized Android Studio as a development environment in order to visualize the application in both iOS and Android."
+      "description": "• Assisted in development of the front end of a mobile application for iOS/Android using Dart and the Flutter framework.\n• Worked with Google Firebase to manage user inputted data across multiple platforms including web and mobile apps.\n• Collaborated with team members using version control systems such as Git to organize modifications and assign tasks.\n• Utilized Android Studio as a development environment in order to visualize the application in both iOS and Android."
     }
   ],
   "projects": [
@@ -56,7 +64,7 @@
       "role": "President",
       "organization": "Fraternity",
       "dates": "Spring 2020 – Present",
-      "achievements": "• Achieved a 4-star fraternity ranking by the Office of Fraternity and Sorority Affairs (highest possible ranking).\n• Managed executive board of 5 members and ran weekly meetings to oversee progress in essential parts of the chapter.\n• Led chapter of 30+ members to work towards goals that improve and promote community service, academics, and unity."
+      "description": "• Achieved a 4-star fraternity ranking by the Office of Fraternity and Sorority Affairs (highest possible ranking).\n• Managed executive board of 5 members and ran weekly meetings to oversee progress in essential parts of the chapter.\n• Led chapter of 30+ members to work towards goals that improve and promote community service, academics, and unity."
     }
   ],
   "technicalSkills": {

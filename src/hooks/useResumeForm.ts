@@ -74,9 +74,15 @@ export function useResumeForm<T extends Record<string, unknown>>(
         const newIndex = direction === "up" ? index - 1 : index + 1;
         [array[index], array[newIndex]] = [array[newIndex], array[index]];
 
+        // Ensure any `order` fields are updated to match new positions
+        const normalized = array.map((item, idx) => ({
+          ...(item as Record<string, unknown>),
+          order: idx,
+        }));
+
         return {
           ...prev,
-          [arrayField]: array,
+          [arrayField]: normalized,
         };
       });
     },
