@@ -32,14 +32,14 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
             aria-current={item.active ? "true" : undefined}
             className={`text-[11px] transition-colors md:text-xs ${
               item.active
-                ? "font-normal text-gray-800"
-                : "font-normal text-indigo-500 hover:text-indigo-600"
+                ? "font-medium text-gray-800"
+                : "font-medium text-indigo-600 hover:text-indigo-700"
             }`}
           >
             {item.label}
           </button>
           {index < items.length - 1 && (
-            <span className="text-[10.5px] text-gray-400">/</span>
+            <span className="text-sm text-gray-300">/</span>
           )}
         </React.Fragment>
       ))}
