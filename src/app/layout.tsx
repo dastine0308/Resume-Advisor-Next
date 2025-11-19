@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "./providers/themeProvider";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume Builder",
-  description:
-    "a web application that helps users create customized resumes and cover letters tailored to specific job postings",
+  title: "Resume Advisor",
+  description: "AI-powered resume builder and career dashboard",
 };
 
 export default function RootLayout({
@@ -28,7 +29,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
