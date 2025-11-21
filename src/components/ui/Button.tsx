@@ -1,7 +1,7 @@
 import React from "react";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "gradient";
+  variant?: "primary" | "secondary" | "outline" | "gradient" | "ghost";
   size?: "sm" | "md" | "lg";
   children: React.ReactNode;
 }
@@ -23,6 +23,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         "bg-white border border-indigo-500 text-indigo-500 hover:bg-gray-50",
       gradient:
         "bg-gradient-to-r from-pink-400 to-purple-400 text-white hover:from-pink-500 hover:to-purple-500",
+      ghost:
+        "bg-transparent text-indigo-500 hover:bg-indigo-50 focus:ring-indigo-500",
     };
 
     const sizeClasses = {

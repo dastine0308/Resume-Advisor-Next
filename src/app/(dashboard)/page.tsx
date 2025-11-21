@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button, DashboardCard, Tabs } from "@/components/ui";
-import { useTheme } from "@/app/providers/themeProvider";
 
 const mockData = {
   totalResumes: 3,
@@ -43,7 +42,6 @@ const mockData = {
 };
 
 export default function DashboardPage() {
-  const { darkMode, toggleDarkMode } = useTheme();
   const { isSignedIn, signOut, loaded } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("all");
@@ -60,7 +58,8 @@ export default function DashboardPage() {
 
   // Handle document actions
   const handleEdit = (id: string) => {
-    router.push(`/content-builder/${id}`);
+    // Navigate to the first step of the resume workflow using query param
+    router.push(`/resume?resumeId=${encodeURIComponent(id)}`);
   };
 
   const handleExport = (id: string) => {
@@ -74,27 +73,7 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
-        <div className="flex items-center justify-between p-4 md:px-5">
-          <span className="text-lg font-bold text-indigo-500 md:text-xl">
-            📋 Resume Advisor
-          </span>
-          <div className="flex items-center gap-4">
-            <button className="rounded-md border border-gray-300 bg-white p-2.5 text-xs">
-              🌙
-            </button>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500 text-base font-bold text-white"
-            >
-              U
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <div className="overflow-auto bg-gray-50">
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-5 md:px-5 md:py-10">
         {/* Welcome Section */}
@@ -113,15 +92,15 @@ export default function DashboardPage() {
             <div className="flex w-max gap-3">
               <div className="min-w-[180px] rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <p className="text-xs text-gray-500">Total Resumes</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">{mockData.totalResumes}</p>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {mockData.totalResumes}
+                </p>
               </div>
               <div className="min-w-[180px] rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <p className="text-xs text-gray-500">Cover Letters</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">{mockData.coverLetters}</p>
-              </div>
-              <div className="min-w-[180px] rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-xs text-gray-500">Saved Jobs</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">{mockData.savedJobPostings}</p>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {mockData.coverLetters}
+                </p>
               </div>
             </div>
           </div>
@@ -139,19 +118,11 @@ export default function DashboardPage() {
             title="Cover Letters"
             value={mockData.coverLetters}
           />
-          <DashboardCard
-            variant="summary"
-            title="Saved Job Postings"
-            value={mockData.savedJobPostings}
-          />
         </div>
 
         {/* Create New Button */}
         <div className="mb-6 md:mb-8">
-          <Button
-            variant="primary"
-            onClick={() => router.push("/content-builder/new")}
-          >
+          <Button variant="primary" onClick={() => router.push("/resume")}>
             + Create New Resume
           </Button>
         </div>
@@ -159,7 +130,7 @@ export default function DashboardPage() {
         {/* Mobile floating action button */}
         <div className="md:hidden">
           <button
-            onClick={() => router.push("/content-builder/new")}
+            onClick={() => router.push("/resume")}
             aria-label="Create new"
             className="fixed bottom-6 right-4 z-50 inline-flex items-center justify-center rounded-full bg-indigo-500 p-4 text-white shadow-lg"
           >
@@ -185,11 +156,6 @@ export default function DashboardPage() {
                 label: "Cover Letters",
                 active: activeTab === "coverLetter",
                 onClick: () => setActiveTab("coverLetter"),
-              },
-              {
-                label: "Job Postings",
-                active: activeTab === "jobPosting",
-                onClick: () => setActiveTab("jobPosting"),
               },
             ]}
           />
