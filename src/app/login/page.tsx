@@ -1,9 +1,11 @@
 "use client";
 
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -11,73 +13,109 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pretend validation passed
+
+    // Basic mock validation (replace with API later)
+    if (!email || !password) {
+      setError("Please fill out all fields.");
+      return;
+    }
+
+    setError("");
     signIn();
     router.push("/"); // redirect to main app
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-6 text-center text-3xl font-bold text-blue-700">
-          Resume Advisor
-        </h1>
-        <h2 className="mb-4 text-center text-xl font-semibold">Login</h2>
+    <div>
+      <div className="mx-auto max-w-md px-4 py-6">
+        <div className="rounded-xl bg-white p-6 shadow-md">
+          {/* Header */}
+          <div className="mb-4 text-center">
+            <h1 className="text-2xl font-bold text-indigo-600">Log In</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Welcome back to Resume Advisor
+            </p>
+          </div>
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
+          {/* Form */}
+          <form
+            ref={(el) => {
+              formRef.current = el;
+            }}
+            onSubmit={handleLogin}
+            className="space-y-4"
+          >
+            <Input
+              label="Email"
+              name="email"
               type="email"
-              placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEmail(e.target.value)
+              }
+              placeholder="you@example.com"
               required
             />
-          </div>
 
-          <div>
-            <label
-              className="mb-1 block text-sm font-medium"
-              htmlFor="password"
-            >
-              Password
-            </label>
-            <input
-              id="password"
+            <Input
+              label="Password"
+              name="password"
               type="password"
-              placeholder="••••••••"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setPassword(e.target.value)
+              }
+              placeholder="********"
               required
             />
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="hidden sm:block">
+              <Button type="submit" variant="primary" className="w-full py-2">
+                Sign In
+              </Button>
+            </div>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-gray-500">
+            Don’t have an account?{" "}
+            <Link
+              href="/signup"
+              className="font-medium text-indigo-600 hover:underline"
+            >
+              Sign up
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* Mobile sticky CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white p-4 sm:hidden">
+        <div className="mx-auto max-w-md">
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.back()}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => formRef.current?.requestSubmit()}
+              style={{
+                background: "linear-gradient(to right, #ec4899, #7c3aed)",
+              }}
+              className="flex-1 rounded-md py-3 text-sm font-semibold text-white shadow-sm"
+            >
+              Sign In
+            </button>
           </div>
-
-          <button
-            type="submit"
-            className="rounded-lg bg-blue-600 py-3 font-semibold text-white transition-all hover:bg-blue-700"
-          >
-            Sign In
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Don’t have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-blue-600 hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
+        </div>
       </div>
     </div>
   );
