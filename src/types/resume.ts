@@ -6,6 +6,7 @@ export interface Education {
   datesAttended: string;
   coursework?: string;
   order?: number;
+  isCollapsed?: boolean;
 }
 
 export interface Experience {
@@ -16,6 +17,7 @@ export interface Experience {
   dates: string;
   description: string;
   order?: number;
+  isCollapsed?: boolean;
 }
 
 export interface Project {
@@ -25,6 +27,7 @@ export interface Project {
   date: string;
   description: string;
   order?: number;
+  isCollapsed?: boolean;
 }
 
 export interface Leadership {
@@ -34,6 +37,7 @@ export interface Leadership {
   dates: string;
   description: string;
   order?: number;
+  isCollapsed?: boolean;
 }
 
 export interface TechnicalSkills {

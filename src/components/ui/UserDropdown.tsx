@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 interface UserDropdownProps {
-  email: string;
+  email?: string;
   onSignOut: () => void;
   onNavigateToAccountSettingsPage: () => void;
   trigger: React.ReactNode;

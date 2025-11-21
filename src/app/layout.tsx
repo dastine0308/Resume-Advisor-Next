@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "./providers/themeProvider";
+import { Header } from "@/components/header";
 
 import "./globals.css";
 
@@ -29,7 +29,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <div className="flex h-screen w-screen flex-col">
+          <Header />
+          <main className="flex flex-1 flex-col overflow-hidden">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );
