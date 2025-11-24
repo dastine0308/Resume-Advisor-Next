@@ -957,7 +957,7 @@ export default function ContentBuilderForm() {
               </div>
             ) : (
               <div className="flex h-full items-center justify-center text-gray-500">
-                <div className="max-w-md text-center">
+                <div className="max-w-5xl text-center">
                   <div className="mb-2">
                     Edit the form or LaTeX to generate a PDF preview.
                   </div>

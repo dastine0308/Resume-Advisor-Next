@@ -50,7 +50,7 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({
               onNavigateToAccountSettingsPage();
             }}
           >
-            <p className="grow text-sm font-medium text-sky-600">{email}</p>
+            <p className="grow text-sm font-medium text-indigo-600">{email}</p>
           </div>
           <div
             className="flex min-w-32 cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-gray-100"

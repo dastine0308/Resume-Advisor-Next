@@ -1,7 +1,8 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { User } from "@/types/user";
 
-interface SignupForm {
-  email: string;
+interface SignupForm extends Omit<User, "id"> {
   password: string;
   confirmPassword?: string;
 }
@@ -9,15 +10,48 @@ interface SignupForm {
 interface SignupStore {
   currentStep: number;
   setCurrentStep: (step: number) => void;
-  signupForm: SignupForm | null;
+  signupForm: SignupForm;
   setSignupForm: (data: SignupForm) => void;
-  clearSignupForm: () => void;
+  resetSignupForm: () => void;
 }
 
-export const useSignupStore = create<SignupStore>((set) => ({
-  currentStep: 1,
-  setCurrentStep: (step) => set({ currentStep: step }),
-  signupForm: null,
-  setSignupForm: (data) => set({ signupForm: data }),
-  clearSignupForm: () => set({ signupForm: null }),
-}));
+export const useSignupStore = create<SignupStore>()(
+  persist(
+    (set) => ({
+      currentStep: 1,
+      setCurrentStep: (step) => set({ currentStep: step }),
+
+      signupForm: {
+        email: "",
+        password: "",
+        confirmPassword: "",
+        first_name: "",
+        last_name: "",
+        phone: "",
+        github: "",
+        linkedin: "",
+        location: "",
+      },
+      setSignupForm: (data) => set({ signupForm: data }),
+
+      resetSignupForm: () =>
+        set({
+          currentStep: 1,
+          signupForm: {
+            email: "",
+            password: "",
+            confirmPassword: "",
+            first_name: "",
+            last_name: "",
+            phone: "",
+            github: "",
+            linkedin: "",
+            location: "",
+          },
+        }),
+    }),
+    {
+      name: "signup-storage",
+    },
+  ),
+);

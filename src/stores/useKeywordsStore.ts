@@ -62,8 +62,6 @@ export const useKeywordsStore = create<KeywordsStore>()(
     }),
     {
       name: "keywords-storage", // localStorage key
-      // 可選：只持久化特定欄位
-      // partialize: (state) => ({ selectedKeywords: state.selectedKeywords }),
     },
   ),
 );

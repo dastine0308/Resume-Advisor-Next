@@ -1,23 +1,70 @@
-import NextAuth, { type AuthOptions } from "next-auth";
-import type { Account, Profile, Session, User } from "next-auth";
+import { type AuthOptions } from "next-auth";
+import type { Session, User } from "next-auth";
 import { AdapterUser } from "next-auth/adapters";
 import type { JWT } from "next-auth/jwt";
+import CredentialsProvider from "next-auth/providers/credentials";
 
-export * from "./types";
+export * from "../../types/user";
 
 interface ExtendedJWT extends JWT {
   id?: string;
+  accessToken?: string;
 }
 
-interface ExtendedSession extends Session {
+interface CustomUser {
+  id: string;
+  accessToken: string;
+}
+
+export interface ExtendedSession extends Session {
   user: {
     id: string;
     name?: string | null;
     email?: string | null;
   };
+  accessToken: string;
 }
 
 export const authOptions: Partial<AuthOptions> & { trustHost?: boolean } = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        try {
+          console.log("🔐 Attempting login with:", credentials?.email);
+
+          // Import dynamically to avoid circular dependency
+          const { login } = await import("@/lib/api-services");
+
+          const data = await login({
+            email: credentials?.email || "",
+            password: credentials?.password || "",
+          });
+
+          console.log(
+            "✅ Login successful, full response:",
+            JSON.stringify(data, null, 2),
+          );
+
+          if (data.success && data.token) {
+            return {
+              id: data.user_id,
+              accessToken: data.token,
+            };
+          }
+
+          return null;
+        } catch (error) {
+          console.error("💥 Login error:", error);
+          return null;
+        }
+      },
+    }),
+  ],
   callbacks: {
     jwt: jwtCallback,
     session: sessionCallback,
@@ -36,20 +83,16 @@ export const authOptions: Partial<AuthOptions> & { trustHost?: boolean } = {
 async function jwtCallback({
   token,
   user,
-  account,
 }: {
   token: ExtendedJWT;
-  user?: User | AdapterUser;
-  account?: Account | null;
-  profile?: Profile;
+  user?: User | AdapterUser | CustomUser;
 }): Promise<ExtendedJWT> {
   try {
     if (user) {
-      // Use the database user ID
       token.id = user.id;
-    }
-    if (account) {
-      token.workosId = account.id;
+      if ("accessToken" in user) {
+        token.accessToken = user.accessToken;
+      }
     }
     return token;
   } catch (error) {
@@ -77,6 +120,7 @@ async function sessionCallback({
         ...session.user,
         id: token.id,
       },
+      accessToken: token.accessToken,
     } as ExtendedSession;
   } catch (error) {
     console.error("Session callback error:", error);
@@ -84,9 +128,5 @@ async function sessionCallback({
   }
 }
 
-// NextAuth expects full AuthOptions (including providers). In this repo the
-// providers are configured elsewhere at runtime; cast to `AuthOptions` to
-// satisfy the type system while keeping the runtime behavior unchanged.
-export const { handlers, signIn, signOut, auth } = NextAuth(
-  authOptions as AuthOptions,
-);
+// Export the auth options for NextAuth v4
+export default authOptions as AuthOptions;

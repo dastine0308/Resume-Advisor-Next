@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { KeywordChip } from "@/components/resume/KeywordChip";
 import { useKeywordsStore, useResumeStore } from "@/stores";
 import { Keyword } from "@/types/keywords";
+import { Label } from "@/components/ui/Label";
 
 export default function JobAnalysisForm() {
   // Job Description State
@@ -72,7 +73,7 @@ export default function JobAnalysisForm() {
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
-      <div className="w-full max-w-6xl space-y-6">
+      <div className="w-full max-w-5xl space-y-6">
         {/* Section 1: Job Description - Title and Content Side by Side */}
         <div className="border-b border-gray-300 p-6 md:p-8">
           <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
@@ -99,10 +100,8 @@ export default function JobAnalysisForm() {
 
               {/* Job Description Textarea */}
               <div className="space-y-1.5">
-                <label className="text-md font-bold text-gray-800">
-                  Job Description
-                </label>
                 <Textarea
+                  label="Job Description"
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
                   placeholder="Paste job description here..."
@@ -114,10 +113,8 @@ export default function JobAnalysisForm() {
 
               {/* URL Input */}
               <div className="space-y-1.5">
-                <label className="text-md font-bold text-gray-800">
-                  Job Posting URL
-                </label>
                 <Input
+                  label="Job Posting URL"
                   type="url"
                   value={jobUrl}
                   onChange={(e) => setJobUrl(e.target.value)}
@@ -131,7 +128,7 @@ export default function JobAnalysisForm() {
               <Button
                 variant="primary"
                 onClick={handleAnalyze}
-                className="w-full disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
+                // className="disabled:gray-50 w-full disabled:cursor-not-allowed md:w-auto"
                 disabled={!isFormValid || isAnalyzing}
               >
                 {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
@@ -156,7 +153,7 @@ export default function JobAnalysisForm() {
 
             {/* Right: Keywords Content */}
             <div className="space-y-3">
-              <h3 className="text-md font-bold text-gray-800">Keywords</h3>
+              <Label>Keywords</Label>
               <div className="min-h-[300px] rounded-lg border border-gray-200 bg-gray-50 p-4">
                 {hasKeywords ? (
                   <div className="flex flex-wrap gap-2">

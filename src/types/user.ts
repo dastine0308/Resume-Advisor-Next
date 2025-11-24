@@ -5,9 +5,13 @@ export interface HashedPassword {
 
 export type User = {
   id: string;
-  email: string | null;
-  name: string | null;
-  phoneNumber: string | null;
+  email: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+  github: string;
+  linkedin: string;
+  location: string;
 };
 
 export type UserWithPassword = User & {
