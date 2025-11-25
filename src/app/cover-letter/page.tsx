@@ -4,8 +4,10 @@ import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useRouter } from "next/navigation";
 
 export default function CoverLetterPage() {
+  const router = useRouter();
   const [recipient, setRecipient] = useState("");
   const [company, setCompany] = useState("");
   const [position, setPosition] = useState("");
@@ -51,7 +53,7 @@ export default function CoverLetterPage() {
           </p>
         </div>
         <div className="flex min-h-screen flex-col bg-gray-50">
-          <main className="flex w-full flex-1 justify-center px-4 py-6 md:px-6 md:py-10">
+          <main className="flex w-full flex-1 justify-center">
             <div className="w-full max-w-5xl">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {/* Editor */}
@@ -158,10 +160,11 @@ export default function CoverLetterPage() {
                           setIntro("");
                           setBody("");
                           setClosing("");
+                          router.push("/");
                         }}
                         className="w-full sm:w-auto"
                       >
-                        Clear
+                        Cancel
                       </Button>
                       <Button
                         variant="primary"
