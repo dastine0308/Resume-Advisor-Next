@@ -9,7 +9,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - LATEX_SERVICE_URL=http://latex-service:80
+      - LATEX_SERVICE_URL=http://latex-service:5400
     volumes:
       # onMount source code for hot reloading
       - .:/app
@@ -28,10 +28,10 @@ services:
       context: .
       dockerfile: Dockerfile.latex
     ports:
-      - "80:80"
+      - "5400:5400"
     environment:
       - NODE_ENV=development
-      - PORT=80
+      - PORT=5400
     volumes:
       - ./latex-service:/app
       - /app/node_modules

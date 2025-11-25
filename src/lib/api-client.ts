@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
-import { getSession } from "next-auth/react";
-import type { ExtendedSession } from "@/lib/auth";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 /**
  * Axios instance with automatic token injection and error handling
@@ -19,12 +18,12 @@ const apiClient: AxiosInstance = axios.create({
  * Request interceptor to inject authentication token
  */
 apiClient.interceptors.request.use(
-  async (config) => {
-    // Get session from NextAuth
-    const session = (await getSession()) as ExtendedSession | null;
+  (config) => {
+    // Get token from cookie via auth store
+    const token = useAuthStore.getState().getToken();
 
-    if (session?.accessToken) {
-      config.headers.Authorization = `Bearer ${session.accessToken}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
@@ -48,6 +47,16 @@ apiClient.interceptors.response.use(
   (error) => {
     // Handle different error scenarios
     if (error.response) {
+      // Handle 401 Unauthorized - token expired or invalid
+      if (error.response.status === 401) {
+        console.warn("Token expired or invalid, logging out...");
+        useAuthStore.getState().logout();
+        // Redirect to login page
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+
       // Server responded with error status
       const message =
         error.response.data?.message ||

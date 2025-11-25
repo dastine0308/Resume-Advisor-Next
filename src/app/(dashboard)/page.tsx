@@ -1,50 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Button, DashboardCard, Tabs } from "@/components/ui";
+import { Button, Dropdown, Tabs } from "@/components/ui";
 import { useAccountStore } from "@/stores";
+import { getUserResumes, deleteResume } from "@/lib/api-services";
+import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
 
-const mockData = {
-  totalResumes: 3,
-  coverLetters: 2,
-  savedJobPostings: 5,
-  documents: [
-    {
-      id: "1",
-      type: "resume",
-      title: "Senior Engineer Resume",
-      subtitle: "Senior Engineer",
-      modifiedDate: "2 days ago",
-    },
-    {
-      id: "2",
-      type: "resume",
-      title: "Product Manager Resume",
-      subtitle: "Product Manager",
-      modifiedDate: "1 week ago",
-    },
-    {
-      id: "3",
-      type: "coverLetter",
-      title: "Tech Corp Cover Letter",
-      subtitle: "Tech Corp",
-      modifiedDate: "3 days ago",
-    },
-    {
-      id: "4",
-      type: "resume",
-      title: "Data Scientist Resume",
-      subtitle: "Data Scientist",
-      modifiedDate: "5 days ago",
-    },
-  ],
-};
+interface Document {
+  id: string;
+  jobId?: number;
+  type: "resume" | "coverLetter";
+  title: string;
+  modifiedDate: string;
+}
+
+function formatRelativeDate(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return "1 week ago";
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return `${Math.floor(diffDays / 30)} months ago`;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("all");
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const user = useAccountStore((state) => state.user);
+
+  useEffect(() => {
+    async function fetchResumes() {
+      try {
+        const response = await getUserResumes();
+        const resumeDocs: Document[] = response?.length
+          ? response.map((resume) => ({
+              id: resume.id,
+              jobId: resume.job_id,
+              type: "resume" as const,
+              title: resume.title || "Untitled Resume",
+              modifiedDate: formatRelativeDate(resume.last_updated),
+            }))
+          : [];
+        setDocuments(resumeDocs);
+      } catch (error) {
+        console.error("Failed to fetch resumes:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchResumes();
+  }, []);
 
   // Handle document actions
   const handleEdit = (id: string) => {
@@ -52,12 +66,17 @@ export default function DashboardPage() {
     router.push(`/resume?resumeId=${encodeURIComponent(id)}`);
   };
 
-  const handleExport = (id: string) => {
-    // Implement export functionality
-    console.log("Export document:", id);
+  const handleDelete = async (id: string) => {
+    console.log("Delete document:", id);
+    try {
+      await deleteResume(id);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+    } catch (error) {
+      console.error("Failed to delete resume:", error);
+    }
   };
 
-  const filteredDocuments = mockData.documents.filter((doc) => {
+  const filteredDocuments = documents.filter((doc) => {
     if (activeTab === "all") return true;
     return doc.type === activeTab;
   });
@@ -77,12 +96,24 @@ export default function DashboardPage() {
         </div>
         {/* Create New Button */}
         <div className="mb-6 md:mb-8">
-          <Button variant="primary" onClick={() => router.push("/resume")}>
-            + Create New Resume
-          </Button>
+          <Dropdown
+            trigger={<Button variant="primary">+ Create New</Button>}
+            items={[
+              {
+                label: "Resume",
+                value: "resume",
+                onClick: () => router.push("/resume"),
+              },
+              {
+                label: "Cover Letter",
+                value: "cover-letter",
+                onClick: () => router.push("/cover-letter"),
+              },
+            ]}
+          />
         </div>
 
-        {/* Document Tabs & Grid */}
+        {/* Document Tabs */}
         <Tabs
           items={[
             {
@@ -103,17 +134,124 @@ export default function DashboardPage() {
           ]}
         />
 
-        <div className="mt-6 grid grid-cols-1 gap-5 md:mt-8 md:grid-cols-2 lg:grid-cols-3">
-          {filteredDocuments.map((doc) => (
-            <DashboardCard
-              key={doc.id}
-              title={doc.title}
-              subtitle={doc.subtitle}
-              modifiedDate={doc.modifiedDate}
-              onEdit={() => handleEdit(doc.id)}
-              onExport={() => handleExport(doc.id)}
-            />
-          ))}
+        {/* Document Table */}
+        <div className="mt-6 md:mt-8">
+          {isLoading ? (
+            <p className="text-center text-gray-500">Loading...</p>
+          ) : filteredDocuments.length === 0 ? (
+            <p className="text-center text-gray-500">
+              No documents found. Create your first resume!
+            </p>
+          ) : (
+            <>
+              {/* Desktop Table */}
+              <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:block">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Modified
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {filteredDocuments.map((doc) => (
+                      <tr key={doc.id} className="hover:bg-gray-50">
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <FileTextIcon className="h-5 w-5 text-gray-400" />
+                            <span className="font-medium text-gray-900">
+                              {doc.title}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                          {doc.type === "resume" ? "Resume" : "Cover Letter"}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                          {doc.modifiedDate}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(doc.id)}
+                              aria-label="Edit"
+                            >
+                              <Pencil1Icon className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(doc.id)}
+                              aria-label="Delete"
+                              className="text-red-600 hover:bg-red-50"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card List */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {filteredDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <FileTextIcon className="h-5 w-5 text-gray-400" />
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {doc.title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {doc.type === "resume" ? "Resume" : "Cover Letter"}{" "}
+                            · {doc.modifiedDate}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(doc.id)}
+                          aria-label="Edit"
+                        >
+                          <Pencil1Icon className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(doc.id)}
+                          aria-label="Delete"
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

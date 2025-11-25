@@ -1,19 +1,25 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { login, getUserData } from "@/lib/api-services";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useAccountStore } from "@/stores/useAccountStore";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setAuth } = useAuthStore();
+  const { setUser } = useAccountStore();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -28,22 +34,22 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
+      const result = await login({ email, password });
 
-      if (result?.error) {
+      if (result.success && result.token) {
+        // Store token in cookie
+        setAuth(result.token, result.user_id);
+        // Fetch and store user data
+        const userData = await getUserData();
+        setUser(userData);
+        router.push("/");
+      } else {
         setError("Invalid email or password");
         setIsLoading(false);
-        return;
       }
-
-      router.push("/");
     } catch (err) {
       console.error("Login error:", err);
-      setError("An error occurred. Please try again.");
+      setError(err instanceof Error ? err.message : "An error occurred. Please try again.");
       setIsLoading(false);
     }
   };
@@ -79,16 +85,14 @@ export default function LoginPage() {
             required
           />
 
-          <Input
+          <PasswordInput
+            id="password"
             label="Password"
-            name="password"
-            type="password"
             value={password}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setPassword(e.target.value)
-            }
-            placeholder="********"
-            required
+            onChange={(value: string) => setPassword(value)}
+            showPassword={showPassword}
+            onToggleShowPassword={() => setShowPassword(!showPassword)}
+            placeholder="Create a password"
           />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -104,7 +108,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Don’t have an account?{" "}
+          Don't have an account?{" "}
           <Link
             href="/signup"
             className="font-medium text-indigo-600 hover:underline"

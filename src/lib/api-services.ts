@@ -1,5 +1,10 @@
+import axios from "axios";
+import https from "https";
 import { api } from "./api-client";
 import type { User } from "@/types/user";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
 
 /**
  * Auth API Services
@@ -13,7 +18,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   success: boolean;
   token: string;
-  user_id: string;
+  user_id: number;
 }
 
 export interface SignupRequest {
@@ -80,4 +85,91 @@ export async function updateUserData(data: UserUpdateRequest): Promise<User> {
  */
 export async function deleteUser(): Promise<{ success: boolean }> {
   return api.delete<{ success: boolean }>("/user");
+}
+
+/**
+ * Resume API Services
+ */
+
+export interface ResumesResponse {
+  id: string;
+  job_id: number;
+  last_updated: string;
+  title: string;
+}
+[];
+
+/**
+ * Get all resumes for the current user
+ */
+export async function getUserResumes(): Promise<ResumesResponse[]> {
+  return api.get<ResumesResponse[]>("/user/resumes");
+}
+
+export interface ResumeDataResponse {
+  id: string;
+  job_id: number;
+  last_updated: string;
+  title: string;
+  personal_info?: {
+    name: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    linkedin?: string;
+    github?: string;
+  };
+  education: Array<{
+    id: string;
+    university_name: string;
+    degree: string;
+    location: string;
+    dates_attended: string;
+    coursework?: string;
+    order?: number;
+  }>;
+  experience: Array<{
+    id: string;
+    job_title: string;
+    company: string;
+    location: string;
+    dates: string;
+    description: string;
+    order?: number;
+  }>;
+  projects: Array<{
+    id: string;
+    project_name: string;
+    technologies: string;
+    date: string;
+    description: string;
+    order?: number;
+  }>;
+  leadership: Array<{
+    id: string;
+    role: string;
+    organization: string;
+    dates: string;
+    description: string;
+    order?: number;
+  }>;
+  technical_skills: {
+    languages: string;
+    developer_tools: string;
+    technologies_frameworks: string;
+  };
+}
+
+/**
+ * Get a specific resume by ID
+ */
+export async function getResumeById(id: string): Promise<ResumeDataResponse> {
+  return api.get<ResumeDataResponse>(`/resumes/${id}`);
+}
+
+/**
+ * Delete a specific resume by ID
+ */
+export async function deleteResume(id: string): Promise<{ success: boolean }> {
+  return api.delete<{ success: boolean }>(`/resumes/${id}`);
 }

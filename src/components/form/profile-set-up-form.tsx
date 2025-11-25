@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useSignupStore } from "@/stores/useSignupStore";
-import { signIn } from "next-auth/react";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useAccountStore } from "@/stores/useAccountStore";
 import { z } from "zod";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { profileSchema } from "@/lib/utils";
@@ -13,6 +14,8 @@ import { profileSchema } from "@/lib/utils";
 export default function ProfileSetUpForm() {
   const router = useRouter();
   const [error, setError] = React.useState<Record<string, string>>({});
+  const { setAuth } = useAuthStore();
+  const { setUser } = useAccountStore();
 
   const { signupForm: form, setSignupForm: setForm } = useSignupStore();
 
@@ -52,7 +55,7 @@ export default function ProfileSetUpForm() {
 
     try {
       // Import API service
-      const { signup } = await import("@/lib/api-services");
+      const { signup, login, getUserData } = await import("@/lib/api-services");
 
       await signup({
         email: form.email,
@@ -65,16 +68,21 @@ export default function ProfileSetUpForm() {
         github_profile_url: form.github,
       });
 
-      const result = await signIn("credentials", {
+      // Login after signup
+      const result = await login({
         email: form.email,
         password: form.password,
-        redirect: false,
       });
-      if (result?.error) {
-        console.error("Error signing in:", result.error);
-        return;
+
+      if (result.success && result.token) {
+        setAuth(result.token, result.user_id);
+        // Fetch and store user data
+        const userData = await getUserData();
+        setUser(userData);
+        router.push("/");
+      } else {
+        console.error("Error signing in after signup");
       }
-      router.push("/");
     } catch (error) {
       console.error("Error updating profile:", error);
       return;

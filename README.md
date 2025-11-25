@@ -220,14 +220,12 @@ The application uses a **Mobile-First** design strategy with Tailwind CSS breakp
 ### Breakpoints
 
 - **Base (< 640px)**: Mobile devices
-
   - Single column layout
   - Smaller text and spacing (px-4, text-xs)
   - Hidden preview panel
   - Full-width content area
 
 - **md (≥ 768px)**: Tablet devices
-
   - Increased text size and spacing
   - Enhanced touch targets
 
@@ -280,26 +278,34 @@ The application uses **[Zustand](https://github.com/pmndrs/zustand)** for state 
 ### Global Stores
 
 #### Account Store (`stores/useAccountStore.ts`)
+
 Manages user account state and profile data:
+
 - User profile information
 - Account settings
 - Profile update operations
 
 #### Signup Store (`stores/useSignupStore.ts`)
+
 Handles the multi-step signup flow:
+
 - Current step tracking
 - Form data persistence across steps
 - Validation state management
 
 #### Keywords Store (`stores/useKeywordsStore.ts`)
+
 Manages job description analysis and keyword selection:
+
 - Job description ID tracking
 - Available keywords data
 - Selected keywords state
 - Keyword toggle operations
 
 #### Resume Store (`stores/useResumeStore.ts`)
+
 Manages resume content and structure:
+
 - Resume sections data
 - Section ordering
 - Form state management
@@ -316,24 +322,31 @@ Manages resume content and structure:
 The application includes several custom React hooks for common operations:
 
 ### User Data Hook (`hooks/useUserData.ts`)
+
 Automatically fetches and syncs user data with the account store:
+
 ```typescript
 const { isLoading, isAuthenticated } = useUserData();
 ```
+
 - Triggers on user login or session restoration
 - Prevents duplicate API calls
 - Automatically updates account store
 - Returns authentication status
 
 ### Resume Form Hook (`hooks/useResumeForm.ts`)
+
 Manages resume form state and operations:
+
 - Form data management
 - Section CRUD operations
 - Validation handling
 - Form submission logic
 
 ### PDF Generation Hook (`hooks/usePDFGeneration.ts`)
+
 Handles LaTeX PDF generation:
+
 - Resume compilation to LaTeX
 - PDF download management
 - Error handling for compilation failures
@@ -348,6 +361,7 @@ The application uses a centralized API client architecture for all backend commu
 Axios-based HTTP client with the following features:
 
 #### Configuration
+
 ```typescript
 const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1",
@@ -359,11 +373,13 @@ const apiClient = axios.create({
 ```
 
 #### Request Interceptor
+
 - Automatic JWT token injection from NextAuth session
 - Adds `Authorization: Bearer <token>` header to all requests
 - Retrieves token from active session automatically
 
 #### Response Interceptor
+
 - Unified error handling across all API calls
 - Automatic extraction of data from backend response structure
 - Network error detection and user-friendly error messages
@@ -374,10 +390,12 @@ const apiClient = axios.create({
 Type-safe service functions for all API endpoints:
 
 #### Authentication
+
 - `login(credentials)`: User login with email/password
 - `signup(data)`: User registration with profile data
 
 #### User Management
+
 - `getUserData()`: Fetch current user profile
 - `updateUserData(data)`: Update user profile
 - `deleteUser()`: Delete user account
@@ -401,6 +419,7 @@ const updatedUser = await updateUserData({
 ### Error Handling
 
 All API calls include automatic error handling:
+
 - Network errors: Connection issues, timeouts
 - Server errors: 4xx and 5xx HTTP status codes
 - Response validation: Type-safe responses with TypeScript
@@ -410,6 +429,7 @@ All API calls include automatic error handling:
 The application uses **NextAuth.js** for secure authentication:
 
 ### Features
+
 - JWT-based session management
 - Secure credential authentication
 - Automatic token refresh
@@ -417,6 +437,7 @@ The application uses **NextAuth.js** for secure authentication:
 - Protected routes with middleware
 
 ### Authentication Flow
+
 1. User submits login credentials
 2. NextAuth validates credentials via backend API
 3. JWT token stored in secure session
@@ -424,7 +445,9 @@ The application uses **NextAuth.js** for secure authentication:
 5. Session expires after inactivity period
 
 ### Configuration
+
 Environment variables required:
+
 ```env
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-super-secret-key
@@ -443,17 +466,19 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
 ## 🔧 Technology Stack
 
 ### Core
+
 - **Framework**: [Next.js 15.5+](https://nextjs.org/) with App Router
 - **Runtime**: [React 19.1](https://react.dev/)
 - **Language**: [TypeScript 5](https://www.typescriptlang.org/)
 - **Styling**: [Tailwind CSS 3.4+](https://tailwindcss.com/)
 
 ### State Management & Data Fetching
+
 - **State Management**: [Zustand 5.0+](https://github.com/pmndrs/zustand)
 - **HTTP Client**: [Axios 1.13+](https://axios-http.com/)
-- **Authentication**: [NextAuth.js 4.24+](https://next-auth.js.org/)
 
 ### UI & Interaction
+
 - **Drag & Drop**: [@dnd-kit](https://dndkit.com/)
 - **Icons**: [@radix-ui/react-icons](https://www.radix-ui.com/icons)
 - **Form Labels**: [@radix-ui/react-label](https://www.radix-ui.com/)
@@ -463,15 +488,18 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
 - **Variants**: [class-variance-authority](https://cva.style/)
 
 ### Validation & Type Safety
+
 - **Schema Validation**: [Zod 3.25+](https://zod.dev/)
 - **Type Checking**: TypeScript with strict mode
 
 ### Development Tools
+
 - **Linting**: [ESLint 9](https://eslint.org/) with Next.js config
 - **Code Formatting**: [Prettier 3.3+](https://prettier.io/) with Tailwind plugin
 - **Font**: [Geist Font Family](https://vercel.com/font)
 
 ### Services
+
 - **PDF Generation**: LaTeX with custom microservice
 - **Containerization**: Docker & Docker Compose
 
