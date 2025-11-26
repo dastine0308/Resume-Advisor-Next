@@ -11,20 +11,24 @@ import { Label } from "@/components/ui/Label";
 
 export default function JobAnalysisForm() {
   // Job Description State
+ 
+  const { resumeId } = useResumeStore();
+  const resumeName = useResumeStore((s) =>
+    s.resumeData?.personalInfo?.name ?? ""
+  );
   const [jobDescription, setJobDescription] = useState("");
-  const [jobUrl, setJobUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const { resumeId } = useResumeStore();
 
   // Keywords State from Store
   const keywordsData = useKeywordsStore((state) => state.keywordsData);
   const toggleKeyword = useKeywordsStore((state) => state.toggleKeyword);
 
+  
+
   const handleAnalyze = useCallback(async () => {
-    if (!jobDescription.trim() && !jobUrl.trim()) {
-      setError("Please provide either a job description or a URL");
+    if (!jobDescription.trim()) {
+      setError("Please provide a job description to analyze");
       return;
     }
 
@@ -38,8 +42,7 @@ export default function JobAnalysisForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          jobDescription,
-          jobUrl,
+          jobDescription: jobDescription,
           resumeId,
         }),
       });
@@ -59,46 +62,78 @@ export default function JobAnalysisForm() {
         })),
       ]);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred",
-      );
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
       console.error("Error analyzing job description:", err);
     } finally {
       setIsAnalyzing(false);
     }
-  }, [jobDescription, jobUrl, resumeId]);
+  }, [jobDescription, resumeId]);
 
-  const isFormValid = jobDescription.trim() !== "" || jobUrl.trim() !== "";
+  
+  const isFormValid = jobDescription.trim() !== "";
   const hasKeywords = keywordsData.length > 0;
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
       <div className="w-full max-w-5xl space-y-6">
-        {/* Section 1: Job Description - Title and Content Side by Side */}
+        
+        {/* Section 1: Name Resume Section - Title and Content Side by Side */}
         <div className="border-b border-gray-300 p-6 md:p-8">
           <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
             {/* Left: Title and Description */}
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-gray-900 md:text-xl">Name your Resume</h2>
+              <p className="text-sm text-gray-600">
+                Give your resume a name to help you stand out
+              </p>
+            </div>
+            {/* Right: Title input (resume title) */}
+            <div className="space-y-6">
+              <div>
+                <Input
+                  label="Title"
+                  type="text"
+                  value={resumeName}
+                  onChange={(e) =>
+                    useResumeStore.getState().setResumeData((prev) => ({
+                      ...prev,
+                      personalInfo: {
+                        ...prev.personalInfo,
+                        name: e.target.value,
+                      },
+                    }))
+                  }
+                  placeholder="Resume title or name"
+                  aria-label="Resume title"
+                />
+              </div>
+
+              {/* (Top section intentionally only includes the Title input) */}
+            </div>
+          </div>
+        </div>
+
+        {/* Target Job section (stacked below) */}
+        <div className="border-b border-gray-300 p-6 md:p-8">
+          <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
             <div className="space-y-2">
               <h2 className="text-lg font-bold text-gray-900 md:text-xl">
                 Target Job
                 <span className="ml-2 text-red-500">*</span>
               </h2>
               <p className="text-sm text-gray-600">
-                Paste your target job description or URL so we can extract
-                keywords
+                Paste your target job description so we can extract keywords
+                and recommend content for your resume.
               </p>
             </div>
 
-            {/* Right: Form Content */}
             <div className="space-y-6">
-              {/* Error Message */}
+              {/* Title input removed from bottom section */}
               {error && (
                 <div className="rounded-md bg-red-50 p-4">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
               )}
-
-              {/* Job Description Textarea */}
               <div className="space-y-1.5">
                 <Textarea
                   label="Job Description"
@@ -111,28 +146,15 @@ export default function JobAnalysisForm() {
                 />
               </div>
 
-              {/* URL Input */}
-              <div className="space-y-1.5">
-                <Input
-                  label="Job Posting URL"
-                  type="url"
-                  value={jobUrl}
-                  onChange={(e) => setJobUrl(e.target.value)}
-                  placeholder="https://example.com/job-posting"
-                  aria-label="Job posting URL"
-                  disabled={isAnalyzing}
-                />
+              <div className="mt-2">
+                <Button
+                  variant="primary"
+                  onClick={handleAnalyze}
+                  disabled={!isFormValid || isAnalyzing}
+                >
+                  {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+                </Button>
               </div>
-
-              {/* Analyze Button */}
-              <Button
-                variant="primary"
-                onClick={handleAnalyze}
-                // className="disabled:gray-50 w-full disabled:cursor-not-allowed md:w-auto"
-                disabled={!isFormValid || isAnalyzing}
-              >
-                {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
-              </Button>
             </div>
           </div>
         </div>
