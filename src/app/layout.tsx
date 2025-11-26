@@ -31,7 +31,7 @@ export default function RootLayout({
       >
         <div className="flex h-screen w-screen flex-col">
           <Header />
-          <div className="flex flex-1 flex-col overflow-hidden bg-gray-50">
+          <div className="flex flex-1 flex-col overflow-scroll bg-gray-50">
             {children}
           </div>
         </div>
