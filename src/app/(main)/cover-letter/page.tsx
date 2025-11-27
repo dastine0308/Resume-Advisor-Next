@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
-import { Button, Dropdown, } from "@/components/ui"
+import React, { useState, useEffect } from "react";
+import { useDebouncedCallback } from "use-debounce";
+import { Button, Dropdown } from "@/components/ui";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useRouter } from "next/navigation";
 import { Label } from "@/components/ui/Label";
-import { getUserResumes } from "@/lib/api-services";
+import { getUserResumes, getResumeById } from "@/lib/api-services";
+import { useCoverLetterStore } from "@/stores";
+import { toast } from "sonner";
 
 export default function CoverLetterPage() {
   const router = useRouter();
@@ -17,59 +20,238 @@ export default function CoverLetterPage() {
   const [resumeTitle, setResumeTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [closing, setClosing] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [resumeList, setResumeList] = useState<{ id: string; jobId: number; title: string; modifiedDate: string }[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedContent, setGeneratedContent] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [resumeList, setResumeList] = useState<
+    { id: string; jobId: number; title: string; modifiedDate: string }[]
+  >([]);
+
+  const {
+    resumeId,
+    jobId,
+    setResumeId,
+    setJobId,
+    setTitle,
+    setContent,
+    content,
+  } = useCoverLetterStore();
+
   const toneList = [
     { tone: "Professional" },
     { tone: "Friendly" },
     { tone: "Concise" },
-  ]
+  ];
 
-  const canGenerate = resumeTitle.trim() !== "" && prompt.trim() !== "";
+  const canGenerate = !!resumeId && prompt.trim() !== "";
 
   useEffect(() => {
     async function fetchResumes() {
       try {
         const response = await getUserResumes();
         const list = response?.length
-          ? response.map((resume:{
-              id: string;
-              job_id: number;
-              last_updated: string;
-              title: string;
-            }) => ({
-              id: resume.id,
-              jobId: resume.job_id,
-              title: resume.title || "Untitled Resume",
-              modifiedDate: resume.last_updated,
-            }))
+          ? response.map(
+              (resume: {
+                id: string;
+                job_id: number;
+                last_updated: string;
+                title: string;
+              }) => ({
+                id: resume.id,
+                jobId: resume.job_id,
+                title: resume.title || "Untitled Resume",
+                modifiedDate: resume.last_updated,
+              }),
+            )
           : [];
         setResumeList(list);
       } catch (error) {
         console.error("Failed to fetch resumes:", error);
-      } finally {
-        setIsLoading(false);
       }
     }
 
     fetchResumes();
   }, []);
 
+  // Handle resume selection
+  const handleResumeSelect = async (resume: {
+    id: string;
+    jobId: number;
+    title: string;
+  }) => {
+    setResumeTitle(resume.title);
+    setResumeId(resume.id);
+    setJobId(resume.jobId);
+  };
 
-// change with LLM API
-  const composed = useMemo(() => {
-    return `Dear ${recipient || "Hiring Manager"},\n\n${prompt}\n\nSincerely,\n${closing || "Your Name"}`;
-  }, [recipient, closing]);
-  
+  // Stream AI-generated cover letter
   const handleGenerate = async () => {
-    setIsLoading(true);
-    try {
-      // Placeholder: in future call AI API to generate text
-      await new Promise((res) => setTimeout(res, 700));
-      if (!closing) setClosing("First Last");
-    } finally {
-      setIsLoading(false);
+    if (!resumeId || !prompt.trim()) {
+      toast.error("Please select a resume and provide a descriptive prompt");
+      return;
     }
+
+    setIsGenerating(true);
+    setGeneratedContent("");
+    setIsEditing(false);
+
+    // Set title before generation for auto-save
+    const coverLetterTitle = `${company || "Cover Letter"} - ${position || "Position"}`;
+    setTitle(coverLetterTitle);
+
+    try {
+      // Fetch resume data client-side to pass to API
+      const resumeData = await getResumeById(resumeId);
+
+      // Fetch job posting keywords if available
+      let keywords: string[] = [];
+      let jobDescription = "";
+      let jobCompany = "";
+      let jobPosition = "";
+      
+      if (resumeData.job_id) {
+        try {
+          const { getJobPosting } = await import("@/lib/api-services");
+          const jobPosting = await getJobPosting(resumeData.job_id.toString());
+          
+          keywords = jobPosting?.selected_requirements || [];
+          jobDescription = jobPosting?.description || "";
+          jobCompany = jobPosting?.company_name || "";
+          jobPosition = jobPosting?.title || "";
+        } catch (error) {
+          // Job posting not found or failed to fetch
+        }
+      }
+
+      const response = await fetch("/api/generate-cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeData,
+          keywords,
+          jobDescription,
+          jobCompany,
+          jobPosition,
+          recipient: recipient || "Hiring Manager",
+          company: company || "",
+          position: position || "",
+          tone,
+          userPrompt: prompt,
+          closing: closing || "Your Name",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to generate cover letter");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.trim().startsWith("0:")) {
+              try {
+                const jsonStr = line.substring(2);
+                const parsed = JSON.parse(jsonStr);
+                if (parsed.text) {
+                  fullText += parsed.text;
+                  setGeneratedContent(fullText);
+                }
+              } catch (e) {
+                // Failed to parse chunk
+              }
+            }
+          }
+        }
+      }
+
+      // Split by double newlines to create paragraphs
+      const paragraphs = fullText
+        .split("\n\n")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+
+      // Update store with generated content
+      setContent({ paragraphs });
+      
+      toast.success("Cover letter generated successfully!");
+      setIsEditing(true);
+
+      // Trigger save after generation
+      setTimeout(() => debouncedSave(), 100);
+    } catch (error) {
+      console.error("Generation error:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate cover letter",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Debounced auto-save
+  const debouncedSave = useDebouncedCallback(async () => {
+    const state = useCoverLetterStore.getState();
+
+    if (!state.jobId || state.content.paragraphs.length === 0) {
+      return;
+    }
+
+    if (!state.title || state.title.trim() === "") {
+      return;
+    }
+
+    const toastId = "cover-letter-auto-save";
+    toast.loading("Saving cover letter...", { id: toastId });
+
+    try {
+      const response = await state.saveCoverLetter();
+      if (response?.success) {
+        toast.success("Saved", { id: toastId, duration: 1500 });
+      } else {
+        toast.error("Failed to save", { id: toastId });
+      }
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      toast.error("Failed to save", { id: toastId });
+    }
+  }, 2000);
+
+  // Trigger auto-save when content changes
+  useEffect(() => {
+    if (content.paragraphs.length > 0) {
+      debouncedSave();
+    }
+  }, [content, debouncedSave]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      debouncedSave.flush();
+      useCoverLetterStore.getState().resetStore();
+    };
+  }, [debouncedSave]);
+
+  // Handle manual editing of generated content
+  const handleEditContent = (newText: string) => {
+    setGeneratedContent(newText);
+    const paragraphs = newText
+      .split("\n\n")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    setContent({ paragraphs });
   };
 
   return (
@@ -80,8 +262,8 @@ export default function CoverLetterPage() {
             Cover Letter
           </h1>
           <p className="text-sm text-gray-600 md:text-base">
-            Compose and preview your tailored cover letter. Preview updates live
-            on the right on larger screens.
+            Generate AI-powered cover letters tailored to your resume and job
+            application. Preview updates in real-time.
           </p>
         </div>
         <div className="flex min-h-screen flex-col bg-gray-50">
@@ -93,9 +275,7 @@ export default function CoverLetterPage() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <Label>
-                          Recipient
-                        </Label>
+                        <Label>Recipient</Label>
                         <Input
                           value={recipient}
                           onChange={(e) => setRecipient(e.target.value)}
@@ -104,9 +284,7 @@ export default function CoverLetterPage() {
                         />
                       </div>
                       <div>
-                        <Label>
-                          Company
-                        </Label>
+                        <Label>Company</Label>
                         <Input
                           value={company}
                           onChange={(e) => setCompany(e.target.value)}
@@ -118,9 +296,7 @@ export default function CoverLetterPage() {
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-1">
                       <div>
-                        <Label>
-                          Position
-                        </Label>
+                        <Label>Position</Label>
                         <Input
                           value={position}
                           onChange={(e) => setPosition(e.target.value)}
@@ -132,9 +308,7 @@ export default function CoverLetterPage() {
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="flex flex-col">
-                        <Label>
-                          Tone
-                        </Label>
+                        <Label>Tone</Label>
                         <Dropdown
                           trigger={
                             <Button variant="outline" className="w-full">
@@ -149,7 +323,9 @@ export default function CoverLetterPage() {
                         />
                       </div>
                       <div className="flex flex-col">
-                        <Label>Resume</Label>
+                        <Label>
+                          Resume <span className="text-red-500">*</span>
+                        </Label>
                         <Dropdown
                           trigger={
                             <Button variant="outline" className="w-full">
@@ -159,29 +335,27 @@ export default function CoverLetterPage() {
                           items={resumeList.map((r) => ({
                             label: r.title,
                             value: r.title,
-                            onClick: () => setResumeTitle(r.title),
+                            onClick: () => handleResumeSelect(r),
                           }))}
                         />
                       </div>
                     </div>
-                   
+
                     <div>
                       <Label>
-                        Descriptive Prompt
+                        Descriptive Prompt <span className="text-red-500">*</span>
                       </Label>
                       <Textarea
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Add any descriptors you would like to note before generation..."
+                        placeholder="Example: I want to emphasize my leadership experience and technical skills in cloud architecture. The tone should be enthusiastic and highlight my passion for innovation."
                         aria-label="Prompt"
                         className="min-h-[140px]"
                       />
                     </div>
 
                     <div>
-                      <Label>
-                        Closing / Signature
-                      </Label>
+                      <Label>Closing / Signature</Label>
                       <Input
                         value={closing}
                         onChange={(e) => setClosing(e.target.value)}
@@ -199,6 +373,10 @@ export default function CoverLetterPage() {
                           setPosition("");
                           setPrompt("");
                           setClosing("");
+                          setResumeTitle("");
+                          setGeneratedContent("");
+                          setIsEditing(false);
+                          useCoverLetterStore.getState().resetStore();
                           router.push("/");
                         }}
                         className="w-full sm:w-auto"
@@ -209,9 +387,9 @@ export default function CoverLetterPage() {
                         variant="primary"
                         onClick={handleGenerate}
                         className="w-full sm:w-auto"
-                        disabled={isLoading || !canGenerate}
+                        disabled={isGenerating || !canGenerate}
                       >
-                        {isLoading ? "Generating..." : "Generate with AI"}
+                        {isGenerating ? "Generating..." : "Generate with AI"}
                       </Button>
                     </div>
                   </div>
@@ -221,28 +399,43 @@ export default function CoverLetterPage() {
                 <aside className="rounded-lg bg-white p-5 shadow-sm md:p-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-900">
-                      Live Preview
+                      {isEditing ? "Editable Preview" : "Live Preview"}
                     </h2>
                     <span className="text-xs text-gray-500">Tone: {tone}</span>
                   </div>
 
-                  <div className="mt-4 flex h-[420px] flex-col overflow-auto rounded border border-gray-100 bg-gray-50 p-4">
-                    <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                      {composed}
-                    </pre>
+                  <div className="mt-4 rounded border border-gray-100 bg-gray-50">
+                    {isEditing ? (
+                      <Textarea
+                        value={generatedContent}
+                        onChange={(e) => handleEditContent(e.target.value)}
+                        className="h-[420px] w-full resize-none border-0 bg-transparent p-4 text-sm leading-relaxed text-gray-800 focus:outline-none focus:ring-0"
+                        placeholder="Your generated cover letter will appear here..."
+                      />
+                    ) : (
+                      <div className="h-[420px] overflow-auto p-4">
+                        <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
+                          {generatedContent ||
+                            "Click 'Generate with AI' to create your cover letter..."}
+                        </pre>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 flex gap-3">
                     <Button
                       variant="outline"
-                      onClick={() => navigator.clipboard?.writeText(composed)}
+                      onClick={() =>
+                        navigator.clipboard?.writeText(generatedContent)
+                      }
                       className="w-full"
+                      disabled={!generatedContent}
                     >
                       Copy
                     </Button>
                     <Button
                       onClick={() => {
-                        const blob = new Blob([composed], {
+                        const blob = new Blob([generatedContent], {
                           type: "text/plain",
                         });
                         const url = URL.createObjectURL(blob);
@@ -255,6 +448,7 @@ export default function CoverLetterPage() {
                         document.body.removeChild(a);
                       }}
                       className="w-full"
+                      disabled={!generatedContent}
                     >
                       Download
                     </Button>

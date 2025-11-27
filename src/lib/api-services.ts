@@ -8,6 +8,12 @@ import type {
   Leadership,
 } from "@/types/resume";
 import type { JobPosting } from "@/types/job-posting";
+import type {
+  CoverLetter,
+  CoverLetterListItem,
+  CreateUpdateCoverLetterRequest,
+  CreateUpdateCoverLetterResponse,
+} from "@/types/cover-letter";
 
 /**
  * Auth API Services
@@ -211,4 +217,39 @@ export async function getJobPosting(id: string): Promise<JobPosting> {
  */
 export async function analyzeJobDescription(data: string): Promise<JobPosting> {
   return api.post<JobPosting>("/ai/analyze-job", data);
+}
+
+/**
+ * Cover Letter API Services
+ */
+
+/**
+ * Get all cover letters for the current user
+ */
+export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
+  return api.get<CoverLetterListItem[]>("/user/coverletters");
+}
+
+/**
+ * Get a specific cover letter by ID
+ */
+export async function getCoverLetterById(id: string): Promise<CoverLetter> {
+  const response = await api.get<{ success: boolean; data: CoverLetter }>(`/cover-letters/${id}`);
+  return response.data;
+}
+
+/**
+ * Create or update a cover letter
+ */
+export async function createOrUpdateCoverLetter(
+  data: CreateUpdateCoverLetterRequest,
+): Promise<CreateUpdateCoverLetterResponse> {
+  return api.post<CreateUpdateCoverLetterResponse>("/cover-letters", data);
+}
+
+/**
+ * Delete a specific cover letter by ID
+ */
+export async function deleteCoverLetter(id: string): Promise<{ success: boolean; message: string }> {
+  return api.delete<{ success: boolean; message: string }>(`/cover-letters/${id}`);
 }
