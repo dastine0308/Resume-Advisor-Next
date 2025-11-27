@@ -6,7 +6,6 @@ import {
   type ResumeCreateUpdateResponse,
 } from "@/lib/api-services";
 import { useAccountStore } from "@/stores/useAccountStore";
-import { use } from "react";
 
 interface ResumeStore {
   resumeId: string;

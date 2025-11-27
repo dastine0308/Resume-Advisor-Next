@@ -1,29 +1,43 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Keyword } from "@/types/keywords";
+import type { Keyword, JobPosting } from "@/types/keywords";
 
 interface KeywordsStore {
   jobId: number;
+  jobDescription: string;
   keywordsData: Keyword[];
   selectedKeywords: Keyword[];
+  jobPosting: JobPosting | null;
 
   // Actions
   setJobId: (id: number) => void;
+  setJobDescription: (desc: string) => void;
   setKeywordsData: (data: Keyword[]) => void;
   toggleKeyword: (id: string) => void;
   resetKeywords: () => void;
   updateSelectedKeywords: () => void;
+  setJobPosting: (data: JobPosting | null) => void;
 }
 
 export const useKeywordsStore = create<KeywordsStore>()(
   persist(
     (set, get) => ({
       jobId: 0,
+      jobDescription: "",
       keywordsData: [],
       selectedKeywords: [],
+      jobPosting: null,
 
       setJobId: (id) => {
         set({ jobId: id });
+      },
+
+      setJobDescription: (desc) => {
+        set({ jobDescription: desc });
+      },
+
+      setJobPosting: (data) => {
+        set({ jobPosting: data });
       },
 
       setKeywordsData: (data) => {

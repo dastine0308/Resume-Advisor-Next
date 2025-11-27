@@ -4,12 +4,12 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { ProgressBar } from "@/components/resume/ProgressBar";
-import { useResumeStore, useAccountStore } from "@/stores";
+import { useResumeStore, useAccountStore, useKeywordsStore } from "@/stores";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import { ResumeData } from "@/types/resume";
 import ContentBuilderForm from "@/components/form/content-builder-form";
 import JobAnalysisForm from "@/components/form/job-description-form";
-import { getResumeById } from "@/lib/api-services";
+import { createOrUpdateJobPosting, getResumeById } from "@/lib/api-services";
 
 interface ResumeContentProps {
   resumeId?: string | null;
@@ -22,7 +22,6 @@ export function ResumeContent({
   const [isLoading, setIsLoading] = useState(!!initialResumeId);
   const {
     jobId,
-    resumeTitle,
     resumeData,
     currentStep,
     setResumeId,
@@ -132,7 +131,7 @@ export function ResumeContent({
   // Trigger auto-save when data changes
   useEffect(() => {
     debouncedSave();
-  }, [resumeData, jobId, resumeTitle, debouncedSave]);
+  }, [resumeData, jobId, debouncedSave]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -163,11 +162,43 @@ export function ResumeContent({
     setCurrentStep(currentStep - 1);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === 2) {
       downloadPdf();
       return;
     }
+
+    // When advancing from Job Description Analysis to Content Builder,
+    // trigger job posting creation with available data.
+    if (currentStep === 1) {
+      const { jobPosting } = useKeywordsStore.getState();
+
+      // Build payload prioritizing parsed JSON draft; fallback to store title and defaults
+      const payload = {
+        title: jobPosting?.title?.trim() || "Untitled Job Posting",
+        company_name: jobPosting?.company_name?.trim() || "Unknown Company",
+        job_location: jobPosting?.job_location?.trim() || "Unknown Location",
+        close_date: jobPosting?.close_date,
+        company_industry: jobPosting?.company_industry,
+        company_location: jobPosting?.company_location,
+        company_website: jobPosting?.company_website,
+        description: jobPosting?.description,
+        posted_date: jobPosting?.posted_date,
+        requirements: jobPosting?.requirements,
+      };
+
+      setIsLoading(true);
+      try {
+        const response = await createOrUpdateJobPosting(payload);
+        console.log("Job posting response:", response);
+      } catch (error) {
+        console.error("Failed to create job posting:", error);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(false);
+    }
+
     setCurrentStep(currentStep + 1);
   };
 
