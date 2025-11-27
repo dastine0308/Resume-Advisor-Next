@@ -1,65 +1,61 @@
 "use client";
 
 import React from "react";
-import "react-phone-number-input/style.css";
-import * as RPNInput from "react-phone-number-input";
 import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { cn } from "@/lib/utils";
 
 type PhoneInputProps = Omit<
   React.ComponentProps<"input">,
   "onChange" | "value" | "ref"
-> &
-  Omit<RPNInput.Props<typeof RPNInput.default>, "onChange"> & {
-    label?: string;
-    variant?: "horizontal" | "vertical";
-    onChange?: (value: RPNInput.Value) => void;
-  };
+> & {
+  label?: string;
+  variant?: "horizontal" | "vertical";
+  value?: string;
+  onChange?: (value: string) => void;
+};
+
+const formatPhoneNumber = (value: string): string => {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+};
+
+export const isValidPhoneNumber = (value: string): boolean => {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 10;
+};
 
 const PhoneInput: React.ForwardRefExoticComponent<PhoneInputProps> =
-  React.forwardRef<React.ElementRef<typeof RPNInput.default>, PhoneInputProps>(
-    ({ className, onChange, variant = "vertical", ...props }, ref) => {
+  React.forwardRef<HTMLInputElement, PhoneInputProps>(
+    (
+      { className, onChange, variant = "vertical", value = "", ...props },
+      ref,
+    ) => {
+      const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawValue = e.target.value;
+        const digits = rawValue.replace(/\D/g, "").slice(0, 10);
+        const formatted = formatPhoneNumber(digits);
+        onChange?.(formatted);
+      };
+
       return (
-        <div
-          className={cn(
-            "w-full gap-1.5",
-            variant === "horizontal"
-              ? "grid items-center gap-y-3 md:grid-cols-[1fr_4fr] md:gap-x-6"
-              : "flex flex-col",
-          )}
-        >
-          {props.label && <Label>{props.label}</Label>}
-          <RPNInput.default
-            ref={ref}
-            label=""
-            inputComponent={InputComponent}
-            smartCaret={false}
-            className="w-64"
-            /**
-             * Handles the onChange event.
-             *
-             * react-phone-number-input might trigger the onChange event as undefined
-             * when a valid phone number is not entered. To prevent this,
-             * the value is coerced to an empty string.
-             *
-             * @param {E164Number | undefined} value - The entered value
-             */
-            onChange={(value) => onChange?.(value || ("" as RPNInput.Value))}
-            {...props}
-          />
-        </div>
+        <Input
+          ref={ref}
+          type="tel"
+          value={value}
+          onChange={handleChange}
+          variant={variant}
+          placeholder="(123) 456-7890"
+          className={cn("w-full", className)}
+          maxLength={14}
+          label={undefined}
+          {...props}
+        />
       );
     },
   );
 PhoneInput.displayName = "PhoneInput";
-
-const InputComponent = React.forwardRef<
-  HTMLInputElement,
-  React.ComponentProps<"input">
->(({ className, ...props }, ref) => (
-  <Input {...props} ref={ref} label={undefined} /> // Ensure label is not passed
-));
-InputComponent.displayName = "InputComponent";
 
 export { PhoneInput };

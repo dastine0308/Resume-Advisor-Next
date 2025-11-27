@@ -90,7 +90,7 @@ export default function ProfileSetUpForm() {
   };
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-md">
+    <div className="rounded-b-xl bg-white p-6 shadow-md">
       {/* Centered Header */}
       <div className="mb-4 text-center">
         <h1 className="text-2xl font-bold text-indigo-600">
@@ -141,18 +141,12 @@ export default function ProfileSetUpForm() {
           <p className="mt-0 text-sm text-red-500">{error.location}</p>
         )}
 
-        <div className="flex w-full flex-col gap-1.5">
-          <label className="text-xs font-bold text-gray-800 md:text-sm">
-            Phone Number
-          </label>
-        </div>
         <PhoneInput
           id="phone"
           label="Phone Number"
           name="phone"
           value={form.phone}
           onChange={(value) => setForm({ ...form, phone: value || "" })}
-          defaultCountry="CA"
           maxLength={14}
         />
         {error.phone && (

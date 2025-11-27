@@ -186,7 +186,6 @@ export default function AccountSettingPage() {
                 onChange={(value) =>
                   setFormData({ ...formData, phone: value || "" })
                 }
-                defaultCountry="CA"
                 maxLength={14}
                 className="w-full md:w-64"
               />
