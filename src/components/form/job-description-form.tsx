@@ -5,21 +5,26 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { KeywordChip } from "@/components/resume/KeywordChip";
-import { useKeywordsStore, useResumeStore } from "@/stores";
-import { Keyword } from "@/types/keywords";
+import { useJobPostingStore, useResumeStore } from "@/stores";
 import { Label } from "@/components/ui/Label";
+import { analyzeJobDescription } from "@/lib/api-services";
 
 export default function JobAnalysisForm() {
   // Job Description State
 
-  const { resumeId, resumeTitle, setResumeTitle } = useResumeStore();
-  const [jobDescription, setJobDescription] = useState("");
+  const { resumeTitle, setResumeTitle } = useResumeStore();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Keywords State from Store
-  const keywordsData = useKeywordsStore((state) => state.keywordsData);
-  const toggleKeyword = useKeywordsStore((state) => state.toggleKeyword);
+  const {
+    jobDescription,
+    setJobDescription,
+    selectedKeywords,
+    setSelectedKeywords,
+    jobPosting,
+    setJobPosting,
+  } = useJobPostingStore();
 
   const handleAnalyze = useCallback(async () => {
     if (!jobDescription.trim()) {
@@ -31,31 +36,10 @@ export default function JobAnalysisForm() {
     setError(null);
 
     try {
-      const response = await fetch("/api/analyze-job-description", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobDescription: jobDescription,
-          resumeId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to analyze job description");
-      }
-
-      const data = await JSON.parse(await response.text())?.data;
-
-      // Update Zustand store with the fetched keywords data
-      useKeywordsStore.getState().setJobId(data.jobId);
-      useKeywordsStore.getState().setKeywordsData([
-        ...data?.keywords.map((keyword: Keyword) => ({
-          ...keyword,
-          selected: false,
-        })),
-      ]);
+      const respData = await analyzeJobDescription(
+        JSON.stringify({ job_description: jobDescription }),
+      );
+      setJobPosting(respData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred",
@@ -64,10 +48,11 @@ export default function JobAnalysisForm() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [jobDescription, resumeId]);
+  }, [jobDescription]);
 
   const isFormValid = jobDescription.trim() !== "";
-  const hasKeywords = keywordsData.length > 0;
+  const hasKeywords =
+    jobPosting?.requirements && jobPosting.requirements.length > 0;
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
@@ -168,18 +153,36 @@ export default function JobAnalysisForm() {
 
             {/* Right: Keywords Content */}
             <div className="space-y-3">
-              <Label>Keywords</Label>
+              <div className="flex justify-between">
+                <Label>Keywords</Label>
+                <p className="text-sm text-gray-600">
+                  {selectedKeywords?.length} keywords selected
+                </p>
+              </div>
               <div className="min-h-[300px] rounded-lg border border-gray-200 bg-gray-50 p-4">
                 {hasKeywords ? (
                   <div className="flex flex-wrap gap-2">
-                    {keywordsData.map((keyword) => (
-                      <KeywordChip
-                        key={keyword.id}
-                        label={keyword.label}
-                        selected={keyword.selected}
-                        onClick={() => toggleKeyword(keyword.id)}
-                      />
-                    ))}
+                    {jobPosting?.requirements &&
+                      jobPosting?.requirements?.length > 0 &&
+                      jobPosting?.requirements.map((keyword, idx) => (
+                        <KeywordChip
+                          key={idx}
+                          label={keyword}
+                          selected={selectedKeywords.includes(keyword)}
+                          onClick={() => {
+                            if (selectedKeywords.includes(keyword)) {
+                              setSelectedKeywords(
+                                selectedKeywords.filter((k) => k !== keyword),
+                              );
+                            } else {
+                              setSelectedKeywords([
+                                ...selectedKeywords,
+                                keyword,
+                              ]);
+                            }
+                          }}
+                        />
+                      ))}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[300px] items-center justify-center">

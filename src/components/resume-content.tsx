@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, use } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { ProgressBar } from "@/components/resume/ProgressBar";
-import { useResumeStore, useAccountStore, useKeywordsStore } from "@/stores";
+import { useResumeStore, useJobPostingStore } from "@/stores";
 import { generateLatexFromData } from "@/lib/latex-generator";
-import { ResumeData } from "@/types/resume";
 import ContentBuilderForm from "@/components/form/content-builder-form";
 import JobAnalysisForm from "@/components/form/job-description-form";
-import { createOrUpdateJobPosting, getResumeById } from "@/lib/api-services";
+import { getJobPosting, getResumeById } from "@/lib/api-services";
+import { toast } from "sonner";
 
 interface ResumeContentProps {
   resumeId?: string | null;
@@ -21,6 +21,7 @@ export function ResumeContent({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(!!initialResumeId);
   const {
+    resumeTitle,
     jobId,
     resumeData,
     currentStep,
@@ -31,115 +32,106 @@ export function ResumeContent({
     setResumeTitle,
     resetStore,
   } = useResumeStore();
-  const user = useAccountStore((state) => state.user);
+  const { jobPosting, selectedKeywords, jobDescription } = useJobPostingStore();
 
-  // Helper to build personalInfo from account store
-  const getPersonalInfoFromAccount = useCallback(() => {
-    return {
-      name: `${user.first_name} ${user.last_name}`.trim() || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      linkedin: user.linkedin || "",
-      github: user.github || "",
-    };
-  }, [user]);
-
-  const fetchResumeData = useCallback(() => {
+  const fetchResumeData = useCallback(async () => {
     if (initialResumeId) {
       setIsLoading(true);
-      getResumeById(initialResumeId)
-        .then((response) => {
-          console.log("Fetched resume data:", response);
-          setResumeData({
-            personalInfo: getPersonalInfoFromAccount(),
-            education: response?.sections?.education || [],
-            experience: response?.sections?.work_experience || [],
-            projects: response?.sections?.projects || [],
-            leadership: response?.sections?.leadership || [],
-            technicalSkills: response?.sections?.skills || {
-              languages: "",
-              developerTools: "",
-              technologiesFrameworks: "",
-            },
-          });
-          setJobId(response.job_id);
-          setResumeTitle(response.title);
-        })
-        .catch((error) => {
-          console.error("Failed to fetch resume data:", error);
-        })
-        .finally(() => {
-          setIsLoading(false);
+
+      const response = await getResumeById(initialResumeId);
+      if (response?.job_id) {
+        setJobId(response.job_id);
+        setResumeTitle(response.title);
+        setResumeData({
+          personalInfo: resumeData?.personalInfo || {},
+          education: response?.sections?.education || [],
+          experience: response?.sections?.work_experience || [],
+          projects: response?.sections?.projects || [],
+          leadership: response?.sections?.leadership || [],
+          technicalSkills: response?.sections?.skills || {
+            languages: "",
+            developerTools: "",
+            technologiesFrameworks: "",
+          },
         });
+
+        const jobPosting = await getJobPosting(response.job_id.toString());
+        useJobPostingStore.getState().setJobPosting(jobPosting);
+        useJobPostingStore
+          .getState()
+          .setSelectedKeywords(jobPosting?.selected_requirements || []);
+        useJobPostingStore
+          .getState()
+          .setJobDescription(jobPosting?.description || "");
+      }
+      setIsLoading(false);
     }
-  }, [
-    initialResumeId,
-    getPersonalInfoFromAccount,
-    setResumeData,
-    setJobId,
-    setResumeTitle,
-  ]);
+  }, [initialResumeId, setResumeData, setJobId, setResumeTitle, resumeData]);
 
   useEffect(() => {
     if (initialResumeId) {
       // Editing existing resume
       setResumeId(initialResumeId);
       fetchResumeData();
-    } else {
-      // Creating new resume - reset store and populate personalInfo from account
-      resetStore();
-      // Ensure personalInfo is populated after reset (handles hydration timing)
-      setResumeData((prev) => ({
-        ...prev,
-        personalInfo: getPersonalInfoFromAccount(),
-      }));
     }
-  }, [
-    initialResumeId,
-    setResumeId,
-    fetchResumeData,
-    resetStore,
-    setResumeData,
-    getPersonalInfoFromAccount,
-  ]);
-
-  // Update personalInfo when user data changes (e.g., after hydration from localStorage)
-  useEffect(() => {
-    if (user.email || user.first_name || user.last_name) {
-      setResumeData((prev) => ({
-        ...prev,
-        personalInfo: getPersonalInfoFromAccount(),
-      }));
-    }
-  }, [user, setResumeData, getPersonalInfoFromAccount]);
+  }, [initialResumeId]);
 
   // Debounced auto-save: saves 2 seconds after user stops editing
-  const debouncedSave = useDebouncedCallback(async () => {
-    // Skip if no jobId (required field)
-    if (!jobId) {
-      console.log("Auto-save skipped: missing jobId");
-      return;
-    }
+  const debouncedSaveJobPosting = useDebouncedCallback(async () => {
+    const toastId = "auto-save";
 
-    console.log("Auto-saving resumeData...");
-    const response = await useResumeStore.getState().saveResume();
-    if (response) {
-      console.log("Auto-save successful:", response);
+    toast.loading("Saving...", { id: toastId });
+    try {
+      const saveJobPostingResponse = await useJobPostingStore
+        .getState()
+        .saveJobPosting();
+      if (saveJobPostingResponse) {
+        toast.success("Saved", { id: toastId, duration: 1500 });
+      }
+    } catch {
+      console.error("Auto-save job posting failed");
+      toast.error("Failed to save", { id: toastId });
     }
   }, 2000);
 
-  // Trigger auto-save when data changes
+  // Debounced auto-save: saves 2 seconds after user stops editing
+  const debouncedSaveResume = useDebouncedCallback(async () => {
+    const toastId = "auto-save";
+
+    toast.loading("Saving...", { id: toastId });
+    try {
+      const saveResumeResponse = await useResumeStore.getState().saveResume();
+      if (saveResumeResponse) {
+        toast.success("Saved", { id: toastId, duration: 1500 });
+      }
+    } catch {
+      toast.error("Failed to save", { id: toastId });
+    }
+  }, 2000);
+
+  // Trigger auto-save when data changes (only if jobPosting exists)
   useEffect(() => {
-    debouncedSave();
-  }, [resumeData, jobId, debouncedSave]);
+    if (jobPosting || jobDescription.trim() !== "") {
+      debouncedSaveJobPosting();
+    }
+  }, [jobPosting, jobDescription, selectedKeywords, debouncedSaveJobPosting]);
+
+  // Trigger auto-save for resume (only if jobId exists)
+  useEffect(() => {
+    if (jobId) {
+      debouncedSaveResume();
+    }
+  }, [resumeData, resumeTitle, jobId, debouncedSaveResume]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      debouncedSave.flush(); // Save any pending changes immediately
+      debouncedSaveResume.flush(); // Save any pending changes immediately
+      debouncedSaveJobPosting.flush(); // Save any pending changes immediately
       useResumeStore.getState().resetStore();
+      useJobPostingStore.getState().resetStore();
     };
-  }, [debouncedSave]);
+  }, [debouncedSaveResume, debouncedSaveJobPosting]);
 
   const steps = [
     {
@@ -166,37 +158,6 @@ export function ResumeContent({
     if (currentStep === 2) {
       downloadPdf();
       return;
-    }
-
-    // When advancing from Job Description Analysis to Content Builder,
-    // trigger job posting creation with available data.
-    if (currentStep === 1) {
-      const { jobPosting } = useKeywordsStore.getState();
-
-      // Build payload prioritizing parsed JSON draft; fallback to store title and defaults
-      const payload = {
-        title: jobPosting?.title?.trim() || "Untitled Job Posting",
-        company_name: jobPosting?.company_name?.trim() || "Unknown Company",
-        job_location: jobPosting?.job_location?.trim() || "Unknown Location",
-        close_date: jobPosting?.close_date,
-        company_industry: jobPosting?.company_industry,
-        company_location: jobPosting?.company_location,
-        company_website: jobPosting?.company_website,
-        description: jobPosting?.description,
-        posted_date: jobPosting?.posted_date,
-        requirements: jobPosting?.requirements,
-      };
-
-      setIsLoading(true);
-      try {
-        const response = await createOrUpdateJobPosting(payload);
-        console.log("Job posting response:", response);
-      } catch (error) {
-        console.error("Failed to create job posting:", error);
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(false);
     }
 
     setCurrentStep(currentStep + 1);

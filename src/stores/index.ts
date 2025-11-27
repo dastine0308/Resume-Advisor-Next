@@ -1,4 +1,4 @@
-export { useKeywordsStore } from "./useKeywordsStore";
+export { useJobPostingStore } from "./useJobPostingStore";
 export { useSignupStore } from "./useSignupStore";
 export { useResumeStore } from "./useResumeStore";
 export { useAccountStore } from "./useAccountStore";

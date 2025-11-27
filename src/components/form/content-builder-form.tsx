@@ -21,7 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { DraggableSection } from "@/components/resume/DraggableSection";
-import { useKeywordsStore, useResumeStore } from "@/stores";
+import { useJobPostingStore, useResumeStore } from "@/stores";
 import { Breadcrumb } from "@/components/resume/Breadcrumb";
 import { FormField } from "@/components/resume/FormField";
 import { Button } from "@/components/ui/Button";
@@ -36,9 +36,7 @@ import {
   generateLaTeXPreviewURL,
   LaTeXServiceUnavailableError,
   getLatexServiceUnavailable,
-  resetLatexServiceState,
 } from "@/lib/latex-client";
-import type { Keyword } from "@/types/keywords";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { toast } from "sonner";
@@ -47,14 +45,11 @@ const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 
 export default function ContentBuilderForm() {
   const {
-    jobId,
-    resumeId,
     resumeData,
     setResumeData,
     latex,
     setLatex,
     mode,
-    setMode,
     loading,
     setLoading,
     setPdfPreviewURL,
@@ -62,6 +57,8 @@ export default function ContentBuilderForm() {
     setCompileError,
     pdfPreviewURL,
   } = useResumeStore();
+
+  const { selectedKeywords } = useJobPostingStore();
 
   const [breadcrumbItems, setBreadcrumbItems] = useState([
     { id: "education", label: "Education", active: true },
@@ -74,68 +71,6 @@ export default function ContentBuilderForm() {
   // AI Enrichment state
   const [enrichingItemId, setEnrichingItemId] = useState<string | null>(null);
   const [enrichError, setEnrichError] = useState<string | null>(null);
-  const [loadingKeywords, setLoadingKeywords] = useState(false);
-
-  // Get selected keywords from store (memoized to prevent infinite loop)
-  const keywordsData = useKeywordsStore((state) => state.keywordsData);
-  const selectedKeywords = useMemo(
-    () => keywordsData.filter((k) => k.selected).map((k) => k.label),
-    [keywordsData],
-  );
-
-  // Load keywords from backend job posting when component mounts
-  useEffect(() => {
-    const loadJobKeywords = async () => {
-      if (!jobId) {
-        // No job posting linked - keywords will be empty (optional)
-        console.log(
-          "[Content Builder] No job_id - proceeding without keywords",
-        );
-        return;
-      }
-
-      setLoadingKeywords(true);
-      try {
-        console.log(
-          `[Content Builder] Fetching keywords from job posting ${jobId}`,
-        );
-
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/job-postings/${jobId}`,
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch job posting");
-        }
-
-        const data = await response.json();
-        const selectedRequirements = data.data?.selected_requirements || [];
-
-        // Transform to Keyword format
-        const keywords: Keyword[] = selectedRequirements.map(
-          (label: string, index: number) => ({
-            id: `${jobId}-${index}`,
-            label,
-            selected: true, // Pre-select all keywords from database
-          }),
-        );
-
-        useKeywordsStore.getState().setJobId(jobId);
-        useKeywordsStore.getState().setKeywordsData(keywords);
-
-        console.log(
-          `[Content Builder] Loaded ${keywords.length} keywords from database`,
-        );
-      } catch (error) {
-        console.error("[Content Builder] Failed to load job keywords:", error);
-        // Silently fail - user can still enrich without keywords
-      } finally {
-        setLoadingKeywords(false);
-      }
-    };
-
-    loadJobKeywords();
-  }, [resumeId]); // Re-run if resumeId changes
 
   const updateEducation = (
     id: string,

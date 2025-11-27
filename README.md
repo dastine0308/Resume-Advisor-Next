@@ -162,7 +162,7 @@ src/
 ├── stores/
 │   ├── useAccountStore.ts     # Zustand store for account state
 │   ├── useSignupStore.ts      # Zustand store for signup flow
-│   ├── useKeywordsStore.ts    # Zustand store for keywords state
+│   ├── useJobPostingStore.ts    # Zustand store for Job posting state
 │   ├── useResumeStore.ts      # Zustand store for resume state
 │   └── index.ts               # Store exports
 ├── hooks/
@@ -293,7 +293,7 @@ Handles the multi-step signup flow:
 - Form data persistence across steps
 - Validation state management
 
-#### Keywords Store (`stores/useKeywordsStore.ts`)
+#### Keywords Store (`stores/useJobPostingStore.ts`)
 
 Manages job description analysis and keyword selection:
 

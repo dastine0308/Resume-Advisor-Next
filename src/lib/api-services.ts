@@ -7,7 +7,7 @@ import type {
   Experience,
   Leadership,
 } from "@/types/resume";
-import type { JobPosting } from "@/types/keywords";
+import type { JobPosting } from "@/types/job-posting";
 
 /**
  * Auth API Services
@@ -184,7 +184,7 @@ export async function deleteResume(id: string): Promise<{ success: boolean }> {
  * Job Posting API Services
  */
 
-export interface JobPostingResponse {
+export interface createOrUpdateJobPostingResponse {
   job_id: number;
   message: string;
   success: boolean;
@@ -195,6 +195,20 @@ export interface JobPostingResponse {
  */
 export async function createOrUpdateJobPosting(
   data: JobPosting,
-): Promise<JobPostingResponse> {
-  return api.post<JobPostingResponse>("/job-postings", data);
+): Promise<createOrUpdateJobPostingResponse> {
+  return api.post<createOrUpdateJobPostingResponse>("/job-postings", data);
+}
+
+/**
+ * Get details of a job posting by ID
+ */
+export async function getJobPosting(id: string): Promise<JobPosting> {
+  return api.get<JobPosting>(`/job-postings/${id}`);
+}
+
+/**
+ * Analyze a job description and extract structured keywords
+ */
+export async function analyzeJobDescription(data: string): Promise<JobPosting> {
+  return api.post<JobPosting>("/ai/analyze-job", data);
 }

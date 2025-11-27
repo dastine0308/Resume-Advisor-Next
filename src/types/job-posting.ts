@@ -1,9 +1,3 @@
-export interface Keyword {
-  id: string;
-  label: string;
-  selected: boolean;
-}
-
 export interface JobPosting {
   close_date?: string;
   company_industry?: string;
