@@ -5,25 +5,30 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { KeywordChip } from "@/components/resume/KeywordChip";
-import { useKeywordsStore, useResumeStore } from "@/stores";
-import { Keyword } from "@/types/keywords";
+import { useJobPostingStore, useResumeStore } from "@/stores";
+import { Label } from "@/components/ui/Label";
+import { analyzeJobDescription } from "@/lib/api-services";
 
 export default function JobAnalysisForm() {
   // Job Description State
-  const [jobDescription, setJobDescription] = useState("");
-  const [jobUrl, setJobUrl] = useState("");
+
+  const { resumeTitle, setResumeTitle } = useResumeStore();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { resumeId } = useResumeStore();
-
   // Keywords State from Store
-  const keywordsData = useKeywordsStore((state) => state.keywordsData);
-  const toggleKeyword = useKeywordsStore((state) => state.toggleKeyword);
+  const {
+    jobDescription,
+    setJobDescription,
+    selectedKeywords,
+    setSelectedKeywords,
+    jobPosting,
+    setJobPosting,
+  } = useJobPostingStore();
 
   const handleAnalyze = useCallback(async () => {
-    if (!jobDescription.trim() && !jobUrl.trim()) {
-      setError("Please provide either a job description or a URL");
+    if (!jobDescription.trim()) {
+      setError("Please provide a job description to analyze");
       return;
     }
 
@@ -31,32 +36,10 @@ export default function JobAnalysisForm() {
     setError(null);
 
     try {
-      const response = await fetch("/api/analyze-job-description", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobDescription,
-          jobUrl,
-          resumeId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to analyze job description");
-      }
-
-      const data = await JSON.parse(await response.text())?.data;
-
-      // Update Zustand store with the fetched keywords data
-      useKeywordsStore.getState().setJobId(data.jobId);
-      useKeywordsStore.getState().setKeywordsData([
-        ...data?.keywords.map((keyword: Keyword) => ({
-          ...keyword,
-          selected: false,
-        })),
-      ]);
+      const respData = await analyzeJobDescription(
+        JSON.stringify({ job_description: jobDescription }),
+      );
+      setJobPosting(respData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred",
@@ -65,46 +48,75 @@ export default function JobAnalysisForm() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [jobDescription, jobUrl, resumeId]);
+  }, [jobDescription]);
 
-  const isFormValid = jobDescription.trim() !== "" || jobUrl.trim() !== "";
-  const hasKeywords = keywordsData.length > 0;
+  const isFormValid = jobDescription.trim() !== "";
+  const hasKeywords =
+    jobPosting?.requirements && jobPosting.requirements.length > 0;
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
-      <div className="w-full max-w-6xl space-y-6">
-        {/* Section 1: Job Description - Title and Content Side by Side */}
+      <div className="w-full max-w-5xl space-y-6">
+        {/* Section 1: Name Resume Section - Title and Content Side by Side */}
         <div className="border-b border-gray-300 p-6 md:p-8">
           <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
             {/* Left: Title and Description */}
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-gray-900 md:text-xl">
+                Name your Resume
+                <span className="ml-2 text-red-500">*</span>
+              </h2>
+              <p className="text-sm text-gray-600">
+                Give your resume a name to help you stand out
+              </p>
+            </div>
+            {/* Right: Title input (resume title) */}
+            <div className="space-y-6">
+              <div>
+                <Input
+                  label="Title"
+                  type="text"
+                  value={resumeTitle}
+                  onChange={(e) => setResumeTitle(e.target.value)}
+                  placeholder="Resume title or name"
+                  aria-label="Resume title"
+                />
+              </div>
+
+              {/* (Top section intentionally only includes the Title input) */}
+            </div>
+          </div>
+        </div>
+
+        {/* Target Job section (stacked below) */}
+        <div className="border-b border-gray-300 p-6 md:p-8">
+          <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
             <div className="space-y-2">
               <h2 className="text-lg font-bold text-gray-900 md:text-xl">
                 Target Job
                 <span className="ml-2 text-red-500">*</span>
               </h2>
               <p className="text-sm text-gray-600">
-                Paste your target job description or URL so we can extract
-                keywords
+                Paste your target job description so we can extract keywords and
+                recommend content for your resume.
               </p>
             </div>
 
-            {/* Right: Form Content */}
             <div className="space-y-6">
-              {/* Error Message */}
+              {/* Title input removed from bottom section */}
               {error && (
                 <div className="rounded-md bg-red-50 p-4">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
               )}
-
-              {/* Job Description Textarea */}
               <div className="space-y-1.5">
-                <label className="text-md font-bold text-gray-800">
-                  Job Description
-                </label>
                 <Textarea
+                  label="Job Description"
                   value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setJobDescription(text);
+                  }}
                   placeholder="Paste job description here..."
                   className="min-h-[120px]"
                   aria-label="Job description text area"
@@ -112,30 +124,15 @@ export default function JobAnalysisForm() {
                 />
               </div>
 
-              {/* URL Input */}
-              <div className="space-y-1.5">
-                <label className="text-md font-bold text-gray-800">
-                  Job Posting URL
-                </label>
-                <Input
-                  type="url"
-                  value={jobUrl}
-                  onChange={(e) => setJobUrl(e.target.value)}
-                  placeholder="https://example.com/job-posting"
-                  aria-label="Job posting URL"
-                  disabled={isAnalyzing}
-                />
+              <div className="mt-2">
+                <Button
+                  variant="primary"
+                  onClick={handleAnalyze}
+                  disabled={!isFormValid || isAnalyzing}
+                >
+                  {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+                </Button>
               </div>
-
-              {/* Analyze Button */}
-              <Button
-                variant="primary"
-                onClick={handleAnalyze}
-                className="w-full disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
-                disabled={!isFormValid || isAnalyzing}
-              >
-                {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
-              </Button>
             </div>
           </div>
         </div>
@@ -156,18 +153,36 @@ export default function JobAnalysisForm() {
 
             {/* Right: Keywords Content */}
             <div className="space-y-3">
-              <h3 className="text-md font-bold text-gray-800">Keywords</h3>
+              <div className="flex justify-between">
+                <Label>Keywords</Label>
+                <p className="text-sm text-gray-600">
+                  {selectedKeywords?.length} keywords selected
+                </p>
+              </div>
               <div className="min-h-[300px] rounded-lg border border-gray-200 bg-gray-50 p-4">
                 {hasKeywords ? (
                   <div className="flex flex-wrap gap-2">
-                    {keywordsData.map((keyword) => (
-                      <KeywordChip
-                        key={keyword.id}
-                        label={keyword.label}
-                        selected={keyword.selected}
-                        onClick={() => toggleKeyword(keyword.id)}
-                      />
-                    ))}
+                    {jobPosting?.requirements &&
+                      jobPosting?.requirements?.length > 0 &&
+                      jobPosting?.requirements.map((keyword, idx) => (
+                        <KeywordChip
+                          key={idx}
+                          label={keyword}
+                          selected={selectedKeywords.includes(keyword)}
+                          onClick={() => {
+                            if (selectedKeywords.includes(keyword)) {
+                              setSelectedKeywords(
+                                selectedKeywords.filter((k) => k !== keyword),
+                              );
+                            } else {
+                              setSelectedKeywords([
+                                ...selectedKeywords,
+                                keyword,
+                              ]);
+                            }
+                          }}
+                        />
+                      ))}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[300px] items-center justify-center">

@@ -207,13 +207,20 @@ export function generateLatexFromData(data: ResumeData): string {
   // Coursework section
   let courseworkSection = "";
   const courseworkItems = data.education
-    .filter((edu) => edu.coursework && edu.coursework.trim())
-    .flatMap((edu) =>
-      edu
+    .filter((edu) => {
+      if (!edu.coursework) return false;
+      if (Array.isArray(edu.coursework)) return edu.coursework.length > 0;
+      return typeof edu.coursework === "string" && edu.coursework.trim();
+    })
+    .flatMap((edu) => {
+      if (Array.isArray(edu.coursework)) {
+        return edu.coursework.map((course) => course.trim()).filter(Boolean);
+      }
+      return edu
         .coursework!.split(",")
         .map((course) => course.trim())
-        .filter(Boolean),
-    );
+        .filter(Boolean);
+    });
   if (courseworkItems.length > 0) {
     courseworkSection =
       "%------RELEVANT COURSEWORK-------\n\\section{Relevant Coursework}\n    %\\resumeSubHeadingListStart\n        \\begin{multicols}{4}\n            \\begin{itemize}[itemsep=-5pt, parsep=3pt]\n";

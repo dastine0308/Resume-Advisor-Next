@@ -13,14 +13,12 @@ export const Tab = React.forwardRef<HTMLButtonElement, TabProps>(
       <button
         ref={ref}
         onClick={onClick}
-        className={`px-5 py-3 text-sm font-medium transition-colors relative
-          ${active ? "text-indigo-500 border-b-2 border-indigo-500" : "text-gray-600 hover:text-gray-800"}
-          ${className}`}
+        className={`relative px-5 py-3 text-sm font-medium transition-colors ${active ? "border-b-2 border-indigo-500 text-indigo-500" : "text-gray-600 hover:text-gray-800"} ${className}`}
       >
         {label}
       </button>
     );
-  }
+  },
 );
 
 Tab.displayName = "Tab";
@@ -35,14 +33,14 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
     return (
       <div
         ref={ref}
-        className={`flex items-center border-b border-gray-200 overflow-x-auto ${className}`}
+        className={`flex items-center overflow-x-auto border-b border-gray-200 ${className}`}
       >
         {items.map((item, index) => (
           <Tab key={index} {...item} />
         ))}
       </div>
     );
-  }
+  },
 );
 
 Tabs.displayName = "Tabs";

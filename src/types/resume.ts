@@ -56,7 +56,7 @@ export interface PersonalInfo {
 }
 
 export interface ResumeData {
-  personalInfo?: PersonalInfo;
+  personalInfo: PersonalInfo;
   education: Education[];
   experience: Experience[];
   projects: Project[];

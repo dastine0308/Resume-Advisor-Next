@@ -1,41 +1,137 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback, use } from "react";
+import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { ProgressBar } from "@/components/resume/ProgressBar";
-import { useResumeStore } from "@/stores";
+import { useResumeStore, useJobPostingStore } from "@/stores";
 import { generateLatexFromData } from "@/lib/latex-generator";
-import { ResumeData } from "@/types/resume";
 import ContentBuilderForm from "@/components/form/content-builder-form";
 import JobAnalysisForm from "@/components/form/job-description-form";
+import { getJobPosting, getResumeById } from "@/lib/api-services";
+import { toast } from "sonner";
 
 interface ResumeContentProps {
   resumeId?: string | null;
-  resumeData?: ResumeData | null;
 }
 
 export function ResumeContent({
   resumeId: initialResumeId,
-  resumeData: initialResumeData,
 }: ResumeContentProps) {
   const router = useRouter();
-  const { setResumeId, setResumeData, currentStep, setCurrentStep } =
-    useResumeStore();
+  const [isLoading, setIsLoading] = useState(!!initialResumeId);
+  const {
+    resumeTitle,
+    jobId,
+    resumeData,
+    currentStep,
+    setResumeId,
+    setResumeData,
+    setCurrentStep,
+    setJobId,
+    setResumeTitle,
+    resetStore,
+  } = useResumeStore();
+  const { jobPosting, selectedKeywords, jobDescription } = useJobPostingStore();
+
+  const fetchResumeData = useCallback(async () => {
+    if (initialResumeId) {
+      setIsLoading(true);
+
+      const response = await getResumeById(initialResumeId);
+      if (response?.job_id) {
+        setJobId(response.job_id);
+        setResumeTitle(response.title);
+        setResumeData({
+          personalInfo: resumeData?.personalInfo || {},
+          education: response?.sections?.education || [],
+          experience: response?.sections?.work_experience || [],
+          projects: response?.sections?.projects || [],
+          leadership: response?.sections?.leadership || [],
+          technicalSkills: response?.sections?.skills || {
+            languages: "",
+            developerTools: "",
+            technologiesFrameworks: "",
+          },
+        });
+
+        const jobPosting = await getJobPosting(response.job_id.toString());
+        useJobPostingStore.getState().setJobPosting(jobPosting);
+        useJobPostingStore
+          .getState()
+          .setSelectedKeywords(jobPosting?.selected_requirements || []);
+        useJobPostingStore
+          .getState()
+          .setJobDescription(jobPosting?.description || "");
+      }
+      setIsLoading(false);
+    }
+  }, [initialResumeId, setResumeData, setJobId, setResumeTitle, resumeData]);
 
   useEffect(() => {
-    setResumeId(initialResumeId || "");
-    if (initialResumeData) {
-      setResumeData(initialResumeData);
+    if (initialResumeId) {
+      // Editing existing resume
+      setResumeId(initialResumeId);
+      fetchResumeData();
     }
-  }, [initialResumeId, initialResumeData]);
+  }, [initialResumeId]);
 
+  // Debounced auto-save: saves 2 seconds after user stops editing
+  const debouncedSaveJobPosting = useDebouncedCallback(async () => {
+    const toastId = "auto-save";
+
+    toast.loading("Saving...", { id: toastId });
+    try {
+      const saveJobPostingResponse = await useJobPostingStore
+        .getState()
+        .saveJobPosting();
+      if (saveJobPostingResponse) {
+        toast.success("Saved", { id: toastId, duration: 1500 });
+      }
+    } catch {
+      console.error("Auto-save job posting failed");
+      toast.error("Failed to save", { id: toastId });
+    }
+  }, 2000);
+
+  // Debounced auto-save: saves 2 seconds after user stops editing
+  const debouncedSaveResume = useDebouncedCallback(async () => {
+    const toastId = "auto-save";
+
+    toast.loading("Saving...", { id: toastId });
+    try {
+      const saveResumeResponse = await useResumeStore.getState().saveResume();
+      if (saveResumeResponse) {
+        toast.success("Saved", { id: toastId, duration: 1500 });
+      }
+    } catch {
+      toast.error("Failed to save", { id: toastId });
+    }
+  }, 2000);
+
+  // Trigger auto-save when data changes (only if jobPosting exists)
+  useEffect(() => {
+    if (jobPosting || jobDescription.trim() !== "") {
+      debouncedSaveJobPosting();
+    }
+  }, [jobPosting, jobDescription, selectedKeywords, debouncedSaveJobPosting]);
+
+  // Trigger auto-save for resume (only if jobId exists)
+  useEffect(() => {
+    if (jobId) {
+      debouncedSaveResume();
+    }
+  }, [resumeData, resumeTitle, jobId, debouncedSaveResume]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log("Save resumeData:", useResumeStore.getState().resumeData);
-      // Clear resume store on unmount to avoid stale data
+      debouncedSaveResume.flush(); // Save any pending changes immediately
+      debouncedSaveJobPosting.flush(); // Save any pending changes immediately
       useResumeStore.getState().resetStore();
+      useJobPostingStore.getState().resetStore();
     };
-  }, []);
+  }, [debouncedSaveResume, debouncedSaveJobPosting]);
 
   const steps = [
     {
@@ -58,11 +154,12 @@ export function ResumeContent({
     setCurrentStep(currentStep - 1);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === 2) {
       downloadPdf();
       return;
     }
+
     setCurrentStep(currentStep + 1);
   };
 

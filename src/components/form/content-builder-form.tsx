@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
 import {
   DndContext,
   closestCenter,
@@ -15,7 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { DraggableSection } from "@/components/resume/DraggableSection";
-import { useKeywordsStore, useResumeStore } from "@/stores";
+import { useJobPostingStore, useResumeStore } from "@/stores";
 import { Breadcrumb } from "@/components/resume/Breadcrumb";
 import { FormField } from "@/components/resume/FormField";
 import { Button } from "@/components/ui/Button";
@@ -26,19 +32,24 @@ import type {
   Project,
   Leadership,
 } from "@/types/resume";
-import { generateLaTeXPreviewURL } from "@/lib/latex-client";
+import {
+  generateLaTeXPreviewURL,
+  LaTeXServiceUnavailableError,
+  getLatexServiceUnavailable,
+} from "@/lib/latex-client";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import { MagicWandIcon } from "@radix-ui/react-icons";
+import { toast } from "sonner";
+
+const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 
 export default function ContentBuilderForm() {
   const {
-    resumeId,
     resumeData,
     setResumeData,
     latex,
     setLatex,
     mode,
-    setMode,
     loading,
     setLoading,
     setPdfPreviewURL,
@@ -47,6 +58,8 @@ export default function ContentBuilderForm() {
     pdfPreviewURL,
   } = useResumeStore();
 
+  const { selectedKeywords } = useJobPostingStore();
+
   const [breadcrumbItems, setBreadcrumbItems] = useState([
     { id: "education", label: "Education", active: true },
     { id: "experience", label: "Experience", active: false },
@@ -54,6 +67,10 @@ export default function ContentBuilderForm() {
     { id: "technical-skills", label: "Skills", active: false },
     { id: "leadership", label: "Leadership", active: false },
   ]);
+
+  // AI Enrichment state
+  const [enrichingItemId, setEnrichingItemId] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
 
   const updateEducation = (
     id: string,
@@ -162,24 +179,23 @@ export default function ContentBuilderForm() {
     }));
   };
 
-  const addLeadership = () => {
-    const newLeadership: Leadership = {
-      id: Date.now().toString(),
-      role: "",
-      organization: "",
-      dates: "",
-      description: "",
-      order: 0,
-      isCollapsed: false,
-    };
-    setResumeData((prev) => ({
-      ...prev,
-      leadership: [
-        ...prev.leadership,
-        { ...newLeadership, order: prev.leadership.length },
-      ],
-    }));
-  };
+  const addLeadership = useCallback(() => {
+    setResumeData((prev) => {
+      const newLeadership: Leadership = {
+        id: `leadership-${Date.now()}-${prev.leadership.length}`,
+        role: "",
+        organization: "",
+        dates: "",
+        description: "",
+        order: prev.leadership.length,
+        isCollapsed: false,
+      };
+      return {
+        ...prev,
+        leadership: [...prev.leadership, newLeadership],
+      };
+    });
+  }, [setResumeData]);
 
   const toggleEducationCollapse = useCallback(
     (id: string) => {
@@ -277,7 +293,20 @@ export default function ContentBuilderForm() {
     [removeAndNormalize],
   );
 
+  const showServiceUnavailableToast = useCallback(() => {
+    toast.warning("Please Contact Support to Activate PDF Preview", {
+      id: LATEX_SERVICE_TOAST_ID,
+      duration: Infinity,
+    });
+  }, []);
+
   const compileLaTeX = async () => {
+    // Skip compilation if service is already known to be unavailable
+    if (getLatexServiceUnavailable()) {
+      showServiceUnavailableToast();
+      return;
+    }
+
     setLoading(true);
     setCompileError(null);
     setPdfPreviewURL(null); // Clear previous preview
@@ -286,21 +315,144 @@ export default function ContentBuilderForm() {
       const latexContent =
         mode === "form" ? generateLatexFromData(resumeData) : latex;
 
-      console.log("[Content Builder] Compiling LaTeX...");
-      console.log("[Content Builder] LaTeX length:", latexContent.length);
-
       const previewURL = await generateLaTeXPreviewURL(latexContent);
-      console.log("[Content Builder] Preview URL:", previewURL);
 
+      // Success - dismiss any existing error toast
+      toast.dismiss(LATEX_SERVICE_TOAST_ID);
       setPdfPreviewURL(previewURL);
-      console.log("[Content Builder] Preview generated successfully");
     } catch (error) {
       console.error("[Content Builder] LaTeX compilation failed:", error);
+
+      if (error instanceof LaTeXServiceUnavailableError) {
+        showServiceUnavailableToast();
+        setCompileError("LaTeX service is unavailable");
+        return;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : "LaTeX compilation failed";
       setCompileError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // AI Enrichment handler
+  const handleEnrichDescription = async (
+    sectionType: "experience" | "project" | "leadership",
+    itemId: string,
+    description: string,
+  ) => {
+    console.log("[Enrich] Starting enrichment:", {
+      sectionType,
+      itemId,
+      descLength: description.length,
+      keywords: selectedKeywords,
+    });
+    setEnrichingItemId(itemId);
+    setEnrichError(null);
+
+    try {
+      const response = await fetch("/api/enrich-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionType,
+          description,
+          keywords: selectedKeywords,
+        }),
+      });
+
+      console.log("[Enrich] Response status:", response.status, response.ok);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Enrich] Error response:", errorText);
+        throw new Error("Failed to enrich description");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let chunkCount = 0;
+
+      if (reader) {
+        console.log("[Enrich] Starting to read stream...");
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log("[Enrich] Stream complete. Total chunks:", chunkCount);
+            break;
+          }
+
+          chunkCount++;
+          const chunk = decoder.decode(value, { stream: true });
+          console.log(`[Enrich] Chunk ${chunkCount}:`, chunk.substring(0, 100));
+
+          // toTextStreamResponse() sends data in format: "0:{\"enhanced_description\":\"text\"}\n"
+          const lines = chunk.split("\n");
+          console.log("[Enrich] Lines in chunk:", lines.length);
+
+          for (const line of lines) {
+            if (line.trim() === "") continue;
+
+            console.log("[Enrich] Processing line:", line.substring(0, 100));
+
+            // Parse the streamed object updates
+            if (line.startsWith("0:")) {
+              try {
+                const jsonStr = line.slice(2);
+                const parsed = JSON.parse(jsonStr);
+
+                console.log("[Enrich] Parsed object:", parsed);
+
+                // Extract the enhanced_description field
+                if (parsed.enhanced_description !== undefined) {
+                  accumulatedText = parsed.enhanced_description;
+
+                  console.log(
+                    "[Enrich] Updated text length:",
+                    accumulatedText.length,
+                  );
+                  console.log(
+                    "[Enrich] Text preview:",
+                    accumulatedText.substring(0, 100),
+                  );
+
+                  // Update the description in real-time
+                  if (sectionType === "experience") {
+                    updateExperience(itemId, "description", accumulatedText);
+                  } else if (sectionType === "project") {
+                    updateProject(itemId, "description", accumulatedText);
+                  } else if (sectionType === "leadership") {
+                    updateLeadership(itemId, "description", accumulatedText);
+                  }
+                }
+              } catch (e) {
+                console.error(
+                  "[Enrich] Parse error:",
+                  e,
+                  "for line:",
+                  line.substring(0, 100),
+                );
+              }
+            }
+          }
+        }
+      }
+
+      console.log(
+        "[Enrich] Final enriched text length:",
+        accumulatedText.length,
+      );
+      console.log("[Enrich] Final text:", accumulatedText);
+    } catch (error) {
+      console.error("Error enriching description:", error);
+      setEnrichError(
+        error instanceof Error ? error.message : "Failed to enrich description",
+      );
+    } finally {
+      setEnrichingItemId(null);
     }
   };
 
@@ -420,87 +572,99 @@ export default function ContentBuilderForm() {
                         items={resumeData.education.map((e) => e.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.education.map((edu, idx) => (
-                          <DraggableSection
-                            key={edu.id}
-                            item={edu}
-                            index={idx}
-                            totalCount={resumeData.education.length}
-                            title={edu.universityName || "New Education"}
-                            onUpdate={updateEducation}
-                            onDelete={deleteEducation}
-                            isOpen={!edu.isCollapsed}
-                            onToggle={() => toggleEducationCollapse(edu.id)}
-                            renderFields={(item) => (
-                              <>
-                                <FormField
-                                  label="University Name"
-                                  name="universityName"
-                                  value={(item as Education).universityName}
-                                  onChange={(_, value) =>
-                                    updateEducation(
-                                      (item as Education).id,
-                                      "universityName",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Degree"
-                                  name="degree"
-                                  value={(item as Education).degree}
-                                  onChange={(_, value) =>
-                                    updateEducation(
-                                      (item as Education).id,
-                                      "degree",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Location"
-                                  name="location"
-                                  value={(item as Education).location}
-                                  onChange={(_, value) =>
-                                    updateEducation(
-                                      (item as Education).id,
-                                      "location",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Dates Attended"
-                                  name="datesAttended"
-                                  value={(item as Education).datesAttended}
-                                  onChange={(_, value) =>
-                                    updateEducation(
-                                      (item as Education).id,
-                                      "datesAttended",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Relevant Coursework"
-                                  name="coursework"
-                                  value={(item as Education).coursework || ""}
-                                  onChange={(_, value) =>
-                                    updateEducation(
-                                      (item as Education).id,
-                                      "coursework",
-                                      value,
-                                    )
-                                  }
-                                  type="textarea"
-                                />
-                              </>
-                            )}
-                          />
-                        ))}
+                        {resumeData.education.length > 0 &&
+                          resumeData.education.some((e) => e.id) &&
+                          resumeData.education.map((edu, idx) => (
+                            <DraggableSection
+                              key={edu.id || `edu-${idx}`}
+                              item={edu}
+                              index={idx}
+                              totalCount={resumeData.education.length}
+                              title={edu.universityName || "New Education"}
+                              onUpdate={updateEducation}
+                              onDelete={deleteEducation}
+                              isOpen={!edu.isCollapsed}
+                              onToggle={() => toggleEducationCollapse(edu.id)}
+                              renderFields={(item) => (
+                                <>
+                                  <FormField
+                                    key="universityName"
+                                    label="University Name"
+                                    name="universityName"
+                                    value={(item as Education).universityName}
+                                    onChange={(_, value) =>
+                                      updateEducation(
+                                        (item as Education).id,
+                                        "universityName",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="State University"
+                                  />
+                                  <FormField
+                                    key="degree"
+                                    label="Degree"
+                                    name="degree"
+                                    value={(item as Education).degree}
+                                    onChange={(_, value) =>
+                                      updateEducation(
+                                        (item as Education).id,
+                                        "degree",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Bachelor of Science in Computer Science"
+                                  />
+                                  <FormField
+                                    key="location"
+                                    label="Location"
+                                    name="location"
+                                    value={(item as Education).location}
+                                    onChange={(_, value) =>
+                                      updateEducation(
+                                        (item as Education).id,
+                                        "location",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="City, State"
+                                  />
+                                  <FormField
+                                    key="datesAttended"
+                                    label="Dates Attended"
+                                    name="datesAttended"
+                                    value={(item as Education).datesAttended}
+                                    onChange={(_, value) =>
+                                      updateEducation(
+                                        (item as Education).id,
+                                        "datesAttended",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Sep. 2017 – May 2021"
+                                  />
+                                  <FormField
+                                    key="coursework"
+                                    label="Relevant Coursework"
+                                    name="coursework"
+                                    value={(item as Education).coursework || ""}
+                                    onChange={(_, value) =>
+                                      updateEducation(
+                                        (item as Education).id,
+                                        "coursework",
+                                        value,
+                                      )
+                                    }
+                                    type="textarea"
+                                    placeholder="Data Structures, Software Methodology, Algorithms Analysis, Database Management"
+                                  />
+                                </>
+                              )}
+                            />
+                          ))}
                         <Button
                           variant="ghost"
-                          className="justfy-start mt-3 flex w-full"
+                          className="mt-3 flex w-full justify-start"
                           onClick={addEducation}
                         >
                           + Add Education
@@ -541,90 +705,119 @@ export default function ContentBuilderForm() {
                         items={resumeData.experience.map((e) => e.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.experience.map((exp, idx) => (
-                          <DraggableSection
-                            key={exp.id}
-                            item={exp}
-                            index={idx}
-                            totalCount={resumeData.experience.length}
-                            title={`${exp.jobTitle || "New Position"}${exp.company ? `, ${exp.company}` : ""}`}
-                            onUpdate={updateExperience}
-                            onDelete={deleteExperience}
-                            isOpen={!exp.isCollapsed}
-                            onToggle={() => toggleExperienceCollapse(exp.id)}
-                            renderFields={(item) => (
-                              <>
-                                <FormField
-                                  label="Job Title"
-                                  name="jobTitle"
-                                  value={(item as Experience).jobTitle}
-                                  onChange={(_, value) =>
-                                    updateExperience(
-                                      (item as Experience).id,
-                                      "jobTitle",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Company"
-                                  name="company"
-                                  value={(item as Experience).company}
-                                  onChange={(_, value) =>
-                                    updateExperience(
-                                      (item as Experience).id,
-                                      "company",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Location"
-                                  name="location"
-                                  value={(item as Experience).location}
-                                  onChange={(_, value) =>
-                                    updateExperience(
-                                      (item as Experience).id,
-                                      "location",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Dates"
-                                  name="dates"
-                                  value={(item as Experience).dates}
-                                  onChange={(_, value) =>
-                                    updateExperience(
-                                      (item as Experience).id,
-                                      "dates",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Description"
-                                  name="description"
-                                  value={(item as Experience).description}
-                                  onChange={(_, value) =>
-                                    updateExperience(
-                                      (item as Experience).id,
-                                      "description",
-                                      value,
-                                    )
-                                  }
-                                  type="textarea"
-                                />
-                                <Button
-                                  variant="primary"
-                                  className="mt-2 flex w-48 items-center justify-center gap-2"
-                                >
-                                  <MagicWandIcon /> Enrich with AI
-                                </Button>
-                              </>
-                            )}
-                          />
-                        ))}
+                        {resumeData.experience.length > 0 &&
+                          resumeData.experience.some((e) => e.id) &&
+                          resumeData.experience.map((exp, idx) => (
+                            <DraggableSection
+                              key={exp.id || `exp-${idx}`}
+                              item={exp}
+                              index={idx}
+                              totalCount={resumeData.experience.length}
+                              title={`${exp.jobTitle || "New Position"}${exp.company ? `, ${exp.company}` : ""}`}
+                              onUpdate={updateExperience}
+                              onDelete={deleteExperience}
+                              isOpen={!exp.isCollapsed}
+                              onToggle={() => toggleExperienceCollapse(exp.id)}
+                              renderFields={(item) => (
+                                <>
+                                  <FormField
+                                    label="Job Title"
+                                    name="jobTitle"
+                                    value={(item as Experience).jobTitle}
+                                    onChange={(_, value) =>
+                                      updateExperience(
+                                        (item as Experience).id,
+                                        "jobTitle",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Software Engineer Intern"
+                                  />
+                                  <FormField
+                                    label="Company"
+                                    name="company"
+                                    value={(item as Experience).company}
+                                    onChange={(_, value) =>
+                                      updateExperience(
+                                        (item as Experience).id,
+                                        "company",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Company Name"
+                                  />
+                                  <FormField
+                                    label="Location"
+                                    name="location"
+                                    value={(item as Experience).location}
+                                    onChange={(_, value) =>
+                                      updateExperience(
+                                        (item as Experience).id,
+                                        "location",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="City, State"
+                                  />
+                                  <FormField
+                                    label="Dates"
+                                    name="dates"
+                                    value={(item as Experience).dates}
+                                    onChange={(_, value) =>
+                                      updateExperience(
+                                        (item as Experience).id,
+                                        "dates",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="May 2020 – August 2020"
+                                  />
+                                  <FormField
+                                    label="Description"
+                                    name="description"
+                                    value={(item as Experience).description}
+                                    onChange={(_, value) =>
+                                      updateExperience(
+                                        (item as Experience).id,
+                                        "description",
+                                        value,
+                                      )
+                                    }
+                                    type="textarea"
+                                    placeholder="- Developed a service to automatically perform unit tests daily."
+                                  />
+                                  <Button
+                                    variant="primary"
+                                    className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "experience",
+                                        (item as Experience).id,
+                                        (item as Experience).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Experience).id ||
+                                      !(item as Experience).description?.trim()
+                                    }
+                                  >
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Experience).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
+                                  </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Experience).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
+                                </>
+                              )}
+                            />
+                          ))}
                         <Button
                           variant="ghost"
                           className="mt-3 flex w-full justify-start"
@@ -668,72 +861,106 @@ export default function ContentBuilderForm() {
                         items={resumeData.projects.map((p) => p.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.projects.map((proj, idx) => (
-                          <DraggableSection
-                            key={proj.id}
-                            item={proj}
-                            index={idx}
-                            totalCount={resumeData.projects.length}
-                            title={proj.projectName || "New Project"}
-                            onUpdate={updateProject}
-                            onDelete={deleteProject}
-                            isOpen={!proj.isCollapsed}
-                            onToggle={() => toggleProjectCollapse(proj.id)}
-                            renderFields={(item) => (
-                              <>
-                                <FormField
-                                  label="Project Name"
-                                  name="projectName"
-                                  value={(item as Project).projectName}
-                                  onChange={(_, value) =>
-                                    updateProject(
-                                      (item as Project).id,
-                                      "projectName",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Technologies"
-                                  name="technologies"
-                                  value={(item as Project).technologies}
-                                  onChange={(_, value) =>
-                                    updateProject(
-                                      (item as Project).id,
-                                      "technologies",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Date"
-                                  name="date"
-                                  value={(item as Project).date}
-                                  onChange={(_, value) =>
-                                    updateProject(
-                                      (item as Project).id,
-                                      "date",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Description (Bullet Points)"
-                                  name="description"
-                                  value={(item as Project).description}
-                                  onChange={(_, value) =>
-                                    updateProject(
-                                      (item as Project).id,
-                                      "description",
-                                      value,
-                                    )
-                                  }
-                                  type="textarea"
-                                />
-                              </>
-                            )}
-                          />
-                        ))}
+                        {resumeData.projects.length > 0 &&
+                          resumeData.projects.some((p) => p.id) &&
+                          resumeData.projects.map((proj, idx) => (
+                            <DraggableSection
+                              key={proj.id || `proj-${idx}`}
+                              item={proj}
+                              index={idx}
+                              totalCount={resumeData.projects.length}
+                              title={proj.projectName || "New Project"}
+                              onUpdate={updateProject}
+                              onDelete={deleteProject}
+                              isOpen={!proj.isCollapsed}
+                              onToggle={() => toggleProjectCollapse(proj.id)}
+                              renderFields={(item) => (
+                                <>
+                                  <FormField
+                                    label="Project Name"
+                                    name="projectName"
+                                    value={(item as Project).projectName}
+                                    onChange={(_, value) =>
+                                      updateProject(
+                                        (item as Project).id,
+                                        "projectName",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Gym Reservation Bot"
+                                  />
+                                  <FormField
+                                    label="Technologies"
+                                    name="technologies"
+                                    value={(item as Project).technologies}
+                                    onChange={(_, value) =>
+                                      updateProject(
+                                        (item as Project).id,
+                                        "technologies",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Python, Selenium, Google Cloud Console"
+                                  />
+                                  <FormField
+                                    label="Date"
+                                    name="date"
+                                    value={(item as Project).date}
+                                    onChange={(_, value) =>
+                                      updateProject(
+                                        (item as Project).id,
+                                        "date",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="January 2021"
+                                  />
+                                  <FormField
+                                    label="Description"
+                                    name="description"
+                                    value={(item as Project).description}
+                                    onChange={(_, value) =>
+                                      updateProject(
+                                        (item as Project).id,
+                                        "description",
+                                        value,
+                                      )
+                                    }
+                                    type="textarea"
+                                    placeholder="- Developed an automatic bot using Python."
+                                  />
+                                  <Button
+                                    variant="primary"
+                                    className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "project",
+                                        (item as Project).id,
+                                        (item as Project).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Project).id ||
+                                      !(item as Project).description?.trim()
+                                    }
+                                  >
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Project).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
+                                  </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Project).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
+                                </>
+                              )}
+                            />
+                          ))}
                         <Button
                           variant="ghost"
                           className="mt-3 flex w-full justify-start"
@@ -765,6 +992,7 @@ export default function ContentBuilderForm() {
                           },
                         }))
                       }
+                      placeholder="Python, Java, C, HTML/CSS, JavaScript, SQL"
                     />
                     <FormField
                       label="Developer Tools"
@@ -779,6 +1007,7 @@ export default function ContentBuilderForm() {
                           },
                         }))
                       }
+                      placeholder="VS Code, Eclipse, Google Cloud Platform, Android Studio"
                     />
                     <FormField
                       label="Technologies/Frameworks"
@@ -793,6 +1022,7 @@ export default function ContentBuilderForm() {
                           },
                         }))
                       }
+                      placeholder="Linux, Jenkins, GitHub, JUnit, WordPress"
                     />
                   </div>
                 </section>
@@ -828,72 +1058,106 @@ export default function ContentBuilderForm() {
                         items={resumeData.leadership.map((l) => l.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.leadership.map((lead, idx) => (
-                          <DraggableSection
-                            key={lead.id}
-                            item={lead}
-                            index={idx}
-                            totalCount={resumeData.leadership.length}
-                            title={`${lead.role || "New Role"}${lead.organization ? `, ${lead.organization}` : ""}`}
-                            onUpdate={updateLeadership}
-                            onDelete={deleteLeadership}
-                            isOpen={!lead.isCollapsed}
-                            onToggle={() => toggleLeadershipCollapse(lead.id)}
-                            renderFields={(item) => (
-                              <>
-                                <FormField
-                                  label="Role"
-                                  name="role"
-                                  value={(item as Leadership).role}
-                                  onChange={(_, value) =>
-                                    updateLeadership(
-                                      (item as Leadership).id,
-                                      "role",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Organization"
-                                  name="organization"
-                                  value={(item as Leadership).organization}
-                                  onChange={(_, value) =>
-                                    updateLeadership(
-                                      (item as Leadership).id,
-                                      "organization",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Dates"
-                                  name="dates"
-                                  value={(item as Leadership).dates}
-                                  onChange={(_, value) =>
-                                    updateLeadership(
-                                      (item as Leadership).id,
-                                      "dates",
-                                      value,
-                                    )
-                                  }
-                                />
-                                <FormField
-                                  label="Description"
-                                  name="description"
-                                  value={(item as Leadership).description}
-                                  onChange={(_, value) =>
-                                    updateLeadership(
-                                      (item as Leadership).id,
-                                      "description",
-                                      value,
-                                    )
-                                  }
-                                  type="textarea"
-                                />
-                              </>
-                            )}
-                          />
-                        ))}
+                        {resumeData.leadership.length > 0 &&
+                          resumeData.leadership.some((l) => l.id) &&
+                          resumeData.leadership.map((lead, idx) => (
+                            <DraggableSection
+                              key={lead.id || `lead-${idx}`}
+                              item={lead}
+                              index={idx}
+                              totalCount={resumeData.leadership.length}
+                              title={`${lead.role || "New Role"}${lead.organization ? `, ${lead.organization}` : ""}`}
+                              onUpdate={updateLeadership}
+                              onDelete={deleteLeadership}
+                              isOpen={!lead.isCollapsed}
+                              onToggle={() => toggleLeadershipCollapse(lead.id)}
+                              renderFields={(item) => (
+                                <>
+                                  <FormField
+                                    label="Role"
+                                    name="role"
+                                    value={(item as Leadership).role}
+                                    onChange={(_, value) =>
+                                      updateLeadership(
+                                        (item as Leadership).id,
+                                        "role",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="President"
+                                  />
+                                  <FormField
+                                    label="Organization"
+                                    name="organization"
+                                    value={(item as Leadership).organization}
+                                    onChange={(_, value) =>
+                                      updateLeadership(
+                                        (item as Leadership).id,
+                                        "organization",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Organization Name"
+                                  />
+                                  <FormField
+                                    label="Dates"
+                                    name="dates"
+                                    value={(item as Leadership).dates}
+                                    onChange={(_, value) =>
+                                      updateLeadership(
+                                        (item as Leadership).id,
+                                        "dates",
+                                        value,
+                                      )
+                                    }
+                                    placeholder="Spring 2020 – Present"
+                                  />
+                                  <FormField
+                                    label="Description"
+                                    name="description"
+                                    value={(item as Leadership).description}
+                                    onChange={(_, value) =>
+                                      updateLeadership(
+                                        (item as Leadership).id,
+                                        "description",
+                                        value,
+                                      )
+                                    }
+                                    type="textarea"
+                                    placeholder="- Managed executive board of 5 members."
+                                  />
+                                  <Button
+                                    variant="primary"
+                                    className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "leadership",
+                                        (item as Leadership).id,
+                                        (item as Leadership).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Leadership).id ||
+                                      !(item as Leadership).description?.trim()
+                                    }
+                                  >
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Leadership).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
+                                  </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Leadership).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
+                                </>
+                              )}
+                            />
+                          ))}
                         <Button
                           variant="ghost"
                           className="mt-3 flex w-full justify-start"
@@ -957,7 +1221,7 @@ export default function ContentBuilderForm() {
               </div>
             ) : (
               <div className="flex h-full items-center justify-center text-gray-500">
-                <div className="max-w-md text-center">
+                <div className="max-w-5xl text-center">
                   <div className="mb-2">
                     Edit the form or LaTeX to generate a PDF preview.
                   </div>
