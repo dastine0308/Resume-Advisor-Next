@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
 import {
   DndContext,
   closestCenter,
@@ -32,6 +38,7 @@ import {
   getLatexServiceUnavailable,
   resetLatexServiceState,
 } from "@/lib/latex-client";
+import type { Keyword } from "@/types/keywords";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { toast } from "sonner";
@@ -40,6 +47,7 @@ const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 
 export default function ContentBuilderForm() {
   const {
+    jobId,
     resumeId,
     resumeData,
     setResumeData,
@@ -62,6 +70,72 @@ export default function ContentBuilderForm() {
     { id: "technical-skills", label: "Skills", active: false },
     { id: "leadership", label: "Leadership", active: false },
   ]);
+
+  // AI Enrichment state
+  const [enrichingItemId, setEnrichingItemId] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [loadingKeywords, setLoadingKeywords] = useState(false);
+
+  // Get selected keywords from store (memoized to prevent infinite loop)
+  const keywordsData = useKeywordsStore((state) => state.keywordsData);
+  const selectedKeywords = useMemo(
+    () => keywordsData.filter((k) => k.selected).map((k) => k.label),
+    [keywordsData],
+  );
+
+  // Load keywords from backend job posting when component mounts
+  useEffect(() => {
+    const loadJobKeywords = async () => {
+      if (!jobId) {
+        // No job posting linked - keywords will be empty (optional)
+        console.log(
+          "[Content Builder] No job_id - proceeding without keywords",
+        );
+        return;
+      }
+
+      setLoadingKeywords(true);
+      try {
+        console.log(
+          `[Content Builder] Fetching keywords from job posting ${jobId}`,
+        );
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/job-postings/${jobId}`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch job posting");
+        }
+
+        const data = await response.json();
+        const selectedRequirements = data.data?.selected_requirements || [];
+
+        // Transform to Keyword format
+        const keywords: Keyword[] = selectedRequirements.map(
+          (label: string, index: number) => ({
+            id: `${jobId}-${index}`,
+            label,
+            selected: true, // Pre-select all keywords from database
+          }),
+        );
+
+        useKeywordsStore.getState().setJobId(jobId);
+        useKeywordsStore.getState().setKeywordsData(keywords);
+
+        console.log(
+          `[Content Builder] Loaded ${keywords.length} keywords from database`,
+        );
+      } catch (error) {
+        console.error("[Content Builder] Failed to load job keywords:", error);
+        // Silently fail - user can still enrich without keywords
+      } finally {
+        setLoadingKeywords(false);
+      }
+    };
+
+    loadJobKeywords();
+  }, [resumeId]); // Re-run if resumeId changes
 
   const updateEducation = (
     id: string,
@@ -170,24 +244,23 @@ export default function ContentBuilderForm() {
     }));
   };
 
-  const addLeadership = () => {
-    const newLeadership: Leadership = {
-      id: Date.now().toString(),
-      role: "",
-      organization: "",
-      dates: "",
-      description: "",
-      order: 0,
-      isCollapsed: false,
-    };
-    setResumeData((prev) => ({
-      ...prev,
-      leadership: [
-        ...prev.leadership,
-        { ...newLeadership, order: prev.leadership.length },
-      ],
-    }));
-  };
+  const addLeadership = useCallback(() => {
+    setResumeData((prev) => {
+      const newLeadership: Leadership = {
+        id: `leadership-${Date.now()}-${prev.leadership.length}`,
+        role: "",
+        organization: "",
+        dates: "",
+        description: "",
+        order: prev.leadership.length,
+        isCollapsed: false,
+      };
+      return {
+        ...prev,
+        leadership: [...prev.leadership, newLeadership],
+      };
+    });
+  }, [setResumeData]);
 
   const toggleEducationCollapse = useCallback(
     (id: string) => {
@@ -329,6 +402,125 @@ export default function ContentBuilderForm() {
     }
   };
 
+  // AI Enrichment handler
+  const handleEnrichDescription = async (
+    sectionType: "experience" | "project" | "leadership",
+    itemId: string,
+    description: string,
+  ) => {
+    console.log("[Enrich] Starting enrichment:", {
+      sectionType,
+      itemId,
+      descLength: description.length,
+      keywords: selectedKeywords,
+    });
+    setEnrichingItemId(itemId);
+    setEnrichError(null);
+
+    try {
+      const response = await fetch("/api/enrich-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionType,
+          description,
+          keywords: selectedKeywords,
+        }),
+      });
+
+      console.log("[Enrich] Response status:", response.status, response.ok);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Enrich] Error response:", errorText);
+        throw new Error("Failed to enrich description");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let chunkCount = 0;
+
+      if (reader) {
+        console.log("[Enrich] Starting to read stream...");
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log("[Enrich] Stream complete. Total chunks:", chunkCount);
+            break;
+          }
+
+          chunkCount++;
+          const chunk = decoder.decode(value, { stream: true });
+          console.log(`[Enrich] Chunk ${chunkCount}:`, chunk.substring(0, 100));
+
+          // toTextStreamResponse() sends data in format: "0:{\"enhanced_description\":\"text\"}\n"
+          const lines = chunk.split("\n");
+          console.log("[Enrich] Lines in chunk:", lines.length);
+
+          for (const line of lines) {
+            if (line.trim() === "") continue;
+
+            console.log("[Enrich] Processing line:", line.substring(0, 100));
+
+            // Parse the streamed object updates
+            if (line.startsWith("0:")) {
+              try {
+                const jsonStr = line.slice(2);
+                const parsed = JSON.parse(jsonStr);
+
+                console.log("[Enrich] Parsed object:", parsed);
+
+                // Extract the enhanced_description field
+                if (parsed.enhanced_description !== undefined) {
+                  accumulatedText = parsed.enhanced_description;
+
+                  console.log(
+                    "[Enrich] Updated text length:",
+                    accumulatedText.length,
+                  );
+                  console.log(
+                    "[Enrich] Text preview:",
+                    accumulatedText.substring(0, 100),
+                  );
+
+                  // Update the description in real-time
+                  if (sectionType === "experience") {
+                    updateExperience(itemId, "description", accumulatedText);
+                  } else if (sectionType === "project") {
+                    updateProject(itemId, "description", accumulatedText);
+                  } else if (sectionType === "leadership") {
+                    updateLeadership(itemId, "description", accumulatedText);
+                  }
+                }
+              } catch (e) {
+                console.error(
+                  "[Enrich] Parse error:",
+                  e,
+                  "for line:",
+                  line.substring(0, 100),
+                );
+              }
+            }
+          }
+        }
+      }
+
+      console.log(
+        "[Enrich] Final enriched text length:",
+        accumulatedText.length,
+      );
+      console.log("[Enrich] Final text:", accumulatedText);
+    } catch (error) {
+      console.error("Error enriching description:", error);
+      setEnrichError(
+        error instanceof Error ? error.message : "Failed to enrich description",
+      );
+    } finally {
+      setEnrichingItemId(null);
+    }
+  };
+
   // Configure sensors with activation constraints to avoid accidental drags
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -449,7 +641,7 @@ export default function ContentBuilderForm() {
                           resumeData.education.some((e) => e.id) &&
                           resumeData.education.map((edu, idx) => (
                             <DraggableSection
-                              key={edu.id}
+                              key={edu.id || `edu-${idx}`}
                               item={edu}
                               index={idx}
                               totalCount={resumeData.education.length}
@@ -582,7 +774,7 @@ export default function ContentBuilderForm() {
                           resumeData.experience.some((e) => e.id) &&
                           resumeData.experience.map((exp, idx) => (
                             <DraggableSection
-                              key={exp.id}
+                              key={exp.id || `exp-${idx}`}
                               item={exp}
                               index={idx}
                               totalCount={resumeData.experience.length}
@@ -594,7 +786,6 @@ export default function ContentBuilderForm() {
                               renderFields={(item) => (
                                 <>
                                   <FormField
-                                    key="jobTitle"
                                     label="Job Title"
                                     name="jobTitle"
                                     value={(item as Experience).jobTitle}
@@ -608,7 +799,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Software Engineer Intern"
                                   />
                                   <FormField
-                                    key="company"
                                     label="Company"
                                     name="company"
                                     value={(item as Experience).company}
@@ -622,7 +812,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Company Name"
                                   />
                                   <FormField
-                                    key="location"
                                     label="Location"
                                     name="location"
                                     value={(item as Experience).location}
@@ -636,7 +825,6 @@ export default function ContentBuilderForm() {
                                     placeholder="City, State"
                                   />
                                   <FormField
-                                    key="dates"
                                     label="Dates"
                                     name="dates"
                                     value={(item as Experience).dates}
@@ -650,7 +838,6 @@ export default function ContentBuilderForm() {
                                     placeholder="May 2020 – August 2020"
                                   />
                                   <FormField
-                                    key="description"
                                     label="Description"
                                     name="description"
                                     value={(item as Experience).description}
@@ -665,12 +852,33 @@ export default function ContentBuilderForm() {
                                     placeholder="- Developed a service to automatically perform unit tests daily."
                                   />
                                   <Button
-                                    key="enrich-button"
                                     variant="primary"
                                     className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "experience",
+                                        (item as Experience).id,
+                                        (item as Experience).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Experience).id ||
+                                      !(item as Experience).description?.trim()
+                                    }
                                   >
-                                    <MagicWandIcon /> Enrich with AI
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Experience).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
                                   </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Experience).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
                                 </>
                               )}
                             />
@@ -722,7 +930,7 @@ export default function ContentBuilderForm() {
                           resumeData.projects.some((p) => p.id) &&
                           resumeData.projects.map((proj, idx) => (
                             <DraggableSection
-                              key={proj.id}
+                              key={proj.id || `proj-${idx}`}
                               item={proj}
                               index={idx}
                               totalCount={resumeData.projects.length}
@@ -734,7 +942,6 @@ export default function ContentBuilderForm() {
                               renderFields={(item) => (
                                 <>
                                   <FormField
-                                    key="projectName"
                                     label="Project Name"
                                     name="projectName"
                                     value={(item as Project).projectName}
@@ -748,7 +955,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Gym Reservation Bot"
                                   />
                                   <FormField
-                                    key="technologies"
                                     label="Technologies"
                                     name="technologies"
                                     value={(item as Project).technologies}
@@ -762,7 +968,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Python, Selenium, Google Cloud Console"
                                   />
                                   <FormField
-                                    key="date"
                                     label="Date"
                                     name="date"
                                     value={(item as Project).date}
@@ -776,7 +981,6 @@ export default function ContentBuilderForm() {
                                     placeholder="January 2021"
                                   />
                                   <FormField
-                                    key="description"
                                     label="Description"
                                     name="description"
                                     value={(item as Project).description}
@@ -790,6 +994,34 @@ export default function ContentBuilderForm() {
                                     type="textarea"
                                     placeholder="- Developed an automatic bot using Python."
                                   />
+                                  <Button
+                                    variant="primary"
+                                    className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "project",
+                                        (item as Project).id,
+                                        (item as Project).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Project).id ||
+                                      !(item as Project).description?.trim()
+                                    }
+                                  >
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Project).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
+                                  </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Project).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
                                 </>
                               )}
                             />
@@ -895,7 +1127,7 @@ export default function ContentBuilderForm() {
                           resumeData.leadership.some((l) => l.id) &&
                           resumeData.leadership.map((lead, idx) => (
                             <DraggableSection
-                              key={lead.id}
+                              key={lead.id || `lead-${idx}`}
                               item={lead}
                               index={idx}
                               totalCount={resumeData.leadership.length}
@@ -907,7 +1139,6 @@ export default function ContentBuilderForm() {
                               renderFields={(item) => (
                                 <>
                                   <FormField
-                                    key="role"
                                     label="Role"
                                     name="role"
                                     value={(item as Leadership).role}
@@ -921,7 +1152,6 @@ export default function ContentBuilderForm() {
                                     placeholder="President"
                                   />
                                   <FormField
-                                    key="organization"
                                     label="Organization"
                                     name="organization"
                                     value={(item as Leadership).organization}
@@ -935,7 +1165,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Organization Name"
                                   />
                                   <FormField
-                                    key="dates"
                                     label="Dates"
                                     name="dates"
                                     value={(item as Leadership).dates}
@@ -949,7 +1178,6 @@ export default function ContentBuilderForm() {
                                     placeholder="Spring 2020 – Present"
                                   />
                                   <FormField
-                                    key="description"
                                     label="Description"
                                     name="description"
                                     value={(item as Leadership).description}
@@ -963,6 +1191,34 @@ export default function ContentBuilderForm() {
                                     type="textarea"
                                     placeholder="- Managed executive board of 5 members."
                                   />
+                                  <Button
+                                    variant="primary"
+                                    className="mt-2 flex w-48 items-center justify-center gap-2"
+                                    onClick={() =>
+                                      handleEnrichDescription(
+                                        "leadership",
+                                        (item as Leadership).id,
+                                        (item as Leadership).description,
+                                      )
+                                    }
+                                    disabled={
+                                      enrichingItemId ===
+                                        (item as Leadership).id ||
+                                      !(item as Leadership).description?.trim()
+                                    }
+                                  >
+                                    <MagicWandIcon />
+                                    {enrichingItemId === (item as Leadership).id
+                                      ? "Enriching..."
+                                      : "Enrich with AI"}
+                                  </Button>
+                                  {enrichError &&
+                                    enrichingItemId ===
+                                      (item as Leadership).id && (
+                                      <p className="mt-1 text-sm text-red-600">
+                                        {enrichError}
+                                      </p>
+                                    )}
                                 </>
                               )}
                             />

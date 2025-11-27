@@ -3,12 +3,12 @@ import { persist } from "zustand/middleware";
 import type { Keyword } from "@/types/keywords";
 
 interface KeywordsStore {
-  jobId: string;
+  jobId: number;
   keywordsData: Keyword[];
   selectedKeywords: Keyword[];
 
   // Actions
-  setJobId: (id: string) => void;
+  setJobId: (id: number) => void;
   setKeywordsData: (data: Keyword[]) => void;
   toggleKeyword: (id: string) => void;
   resetKeywords: () => void;
@@ -18,7 +18,7 @@ interface KeywordsStore {
 export const useKeywordsStore = create<KeywordsStore>()(
   persist(
     (set, get) => ({
-      jobId: "",
+      jobId: 0,
       keywordsData: [],
       selectedKeywords: [],
 
