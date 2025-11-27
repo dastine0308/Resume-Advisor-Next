@@ -1,10 +1,13 @@
-import axios from "axios";
-import https from "https";
 import { api } from "./api-client";
 import type { User } from "@/types/user";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
+import type {
+  Education,
+  TechnicalSkills,
+  Project,
+  Experience,
+  Leadership,
+} from "@/types/resume";
+import type { JobPosting } from "@/types/keywords";
 
 /**
  * Auth API Services
@@ -91,6 +94,24 @@ export async function deleteUser(): Promise<{ success: boolean }> {
  * Resume API Services
  */
 
+export interface ResumeSection {
+  education: [
+    {
+      coursework: string;
+      datesAttended: string;
+      degree: string;
+      id: string;
+      location: string;
+      order: number;
+      universityName: string;
+    },
+  ];
+  order: string[];
+  projects: unknown;
+  skills: unknown;
+  work_experience: unknown;
+}
+
 export interface ResumesResponse {
   id: string;
   job_id: number;
@@ -106,58 +127,43 @@ export async function getUserResumes(): Promise<ResumesResponse[]> {
   return api.get<ResumesResponse[]>("/user/resumes");
 }
 
+export interface ResumeCreateUpdateRequest {
+  id?: string;
+  job_id: number;
+  sections: ResumeDataSection;
+  title: string;
+}
+
+export interface ResumeCreateUpdateResponse {
+  resume_id: string;
+  success: boolean;
+}
+
+export interface ResumeDataSection {
+  education: Education[];
+  order?: string[];
+  projects: Project[];
+  skills: TechnicalSkills;
+  work_experience: Experience[];
+  leadership?: Leadership[];
+}
+
 export interface ResumeDataResponse {
-  id: string;
+  creation_date: string;
+  id: number;
   job_id: number;
   last_updated: string;
+  sections: ResumeDataSection;
   title: string;
-  personal_info?: {
-    name: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    linkedin?: string;
-    github?: string;
-  };
-  education: Array<{
-    id: string;
-    university_name: string;
-    degree: string;
-    location: string;
-    dates_attended: string;
-    coursework?: string;
-    order?: number;
-  }>;
-  experience: Array<{
-    id: string;
-    job_title: string;
-    company: string;
-    location: string;
-    dates: string;
-    description: string;
-    order?: number;
-  }>;
-  projects: Array<{
-    id: string;
-    project_name: string;
-    technologies: string;
-    date: string;
-    description: string;
-    order?: number;
-  }>;
-  leadership: Array<{
-    id: string;
-    role: string;
-    organization: string;
-    dates: string;
-    description: string;
-    order?: number;
-  }>;
-  technical_skills: {
-    languages: string;
-    developer_tools: string;
-    technologies_frameworks: string;
-  };
+}
+
+/**
+ * Create or update a resume
+ */
+export async function createOrUpdateResume(
+  data: ResumeCreateUpdateRequest,
+): Promise<ResumeCreateUpdateResponse> {
+  return api.post<ResumeCreateUpdateResponse>("/resumes", data);
 }
 
 /**
@@ -178,22 +184,6 @@ export async function deleteResume(id: string): Promise<{ success: boolean }> {
  * Job Posting API Services
  */
 
-/*
- * Post a job description for analysis
- */
-export interface JobPostingPayload {
-  close_date?: string; // YYYY-MM-DD
-  company_industry?: string;
-  company_location?: string;
-  company_name: string;
-  company_website?: string;
-  description?: string;
-  job_location: string;
-  posted_date?: string; // YYYY-MM-DD
-  requirements?: string[];
-  title: string;
-}
-
 export interface JobPostingResponse {
   job_id: number;
   message: string;
@@ -201,20 +191,10 @@ export interface JobPostingResponse {
 }
 
 /**
- * Create a job posting
+ * Create or update a job posting
  */
-export async function createJobPosting(
-  payload: JobPostingPayload
+export async function createOrUpdateJobPosting(
+  data: JobPosting,
 ): Promise<JobPostingResponse> {
-  // Call the local Next.js route (not the external API client)
-  const res = await fetch("/api/job-postings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || `Failed to create job posting (${res.status})`);
-  }
-  return (await res.json()) as JobPostingResponse;
+  return api.post<JobPostingResponse>("/job-postings", data);
 }
