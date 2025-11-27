@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { Button, Dropdown, Tabs } from "@/components/ui"
+import React, { useMemo, useState, useEffect } from "react";
+import { Button, Dropdown, } from "@/components/ui"
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useRouter } from "next/navigation";
 import { Label } from "@/components/ui/Label";
+import { getUserResumes } from "@/lib/api-services";
 
 export default function CoverLetterPage() {
   const router = useRouter();
@@ -17,15 +18,45 @@ export default function CoverLetterPage() {
   const [prompt, setPrompt] = useState("");
   const [closing, setClosing] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const resumeList = [
-    { resumeTitle: "Resume 1" },
-    { resumeTitle: "Resume 2" },]
+  const [resumeList, setResumeList] = useState<{ id: string; jobId: number; title: string; modifiedDate: string }[]>([]);
   const toneList = [
     { tone: "Professional" },
     { tone: "Friendly" },
     { tone: "Concise" },
   ]
 
+  const canGenerate = resumeTitle.trim() !== "" && prompt.trim() !== "";
+
+  useEffect(() => {
+    async function fetchResumes() {
+      try {
+        const response = await getUserResumes();
+        const list = response?.length
+          ? response.map((resume:{
+              id: string;
+              job_id: number;
+              last_updated: string;
+              title: string;
+            }) => ({
+              id: resume.id,
+              jobId: resume.job_id,
+              title: resume.title || "Untitled Resume",
+              modifiedDate: resume.last_updated,
+            }))
+          : [];
+        setResumeList(list);
+      } catch (error) {
+        console.error("Failed to fetch resumes:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchResumes();
+  }, []);
+
+
+// change with LLM API
   const composed = useMemo(() => {
     return `Dear ${recipient || "Hiring Manager"},\n\n${prompt}\n\nSincerely,\n${closing || "Your Name"}`;
   }, [recipient, closing]);
@@ -126,9 +157,9 @@ export default function CoverLetterPage() {
                             </Button>
                           }
                           items={resumeList.map((r) => ({
-                            label: r.resumeTitle,
-                            value: r.resumeTitle,
-                            onClick: () => setResumeTitle(r.resumeTitle),
+                            label: r.title,
+                            value: r.title,
+                            onClick: () => setResumeTitle(r.title),
                           }))}
                         />
                       </div>
@@ -178,7 +209,7 @@ export default function CoverLetterPage() {
                         variant="primary"
                         onClick={handleGenerate}
                         className="w-full sm:w-auto"
-                        disabled={isLoading}
+                        disabled={isLoading || !canGenerate}
                       >
                         {isLoading ? "Generating..." : "Generate with AI"}
                       </Button>
