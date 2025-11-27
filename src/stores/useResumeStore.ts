@@ -1,9 +1,22 @@
 import { create } from "zustand";
 import type { ResumeData } from "@/types/resume";
+import {
+  createOrUpdateResume,
+  type ResumeCreateUpdateRequest,
+  type ResumeCreateUpdateResponse,
+} from "@/lib/api-services";
+import { useAccountStore } from "@/stores/useAccountStore";
+import { use } from "react";
 
 interface ResumeStore {
   resumeId: string;
   setResumeId: (id: string) => void;
+
+  resumeTitle: string;
+  setResumeTitle: (title: string) => void;
+
+  jobId: number | null;
+  setJobId: (id: number | null) => void;
 
   resumeData: ResumeData;
   setResumeData: (d: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
@@ -28,13 +41,24 @@ interface ResumeStore {
   isPdfGenerating: boolean;
   setIsPdfGenerating: (v: boolean) => void;
 
+  // Save resume to API
+  isSaving: boolean;
+  saveError: string | null;
+  saveResume: () => Promise<ResumeCreateUpdateResponse | null>;
+
   // Reset the store to initial state
   resetStore: () => void;
 }
 
-export const useResumeStore = create<ResumeStore>((set) => ({
+export const useResumeStore = create<ResumeStore>((set, get) => ({
   resumeId: "",
   setResumeId: (id) => set({ resumeId: id }),
+
+  resumeTitle: "",
+  setResumeTitle: (title) => set({ resumeTitle: title }),
+
+  jobId: null,
+  setJobId: (id) => set({ jobId: id }),
 
   currentStep: 1,
   setCurrentStep: (step) => set({ currentStep: step }),
@@ -125,16 +149,55 @@ export const useResumeStore = create<ResumeStore>((set) => ({
 
   isPdfGenerating: false,
   setIsPdfGenerating: (v) => set({ isPdfGenerating: v }),
+
+  isSaving: false,
+  saveError: null,
+  saveResume: async () => {
+    const { resumeId, resumeData, resumeTitle, jobId } = get();
+
+    if (jobId === null) {
+      set({ saveError: "Job ID is required to save resume" });
+      return null;
+    }
+
+    const request: ResumeCreateUpdateRequest = {
+      id: resumeId || undefined,
+      job_id: jobId,
+      sections: {
+        education: resumeData.education,
+        projects: resumeData.projects,
+        skills: resumeData.technicalSkills,
+        work_experience: resumeData.experience,
+        leadership: resumeData.leadership,
+      },
+      title: resumeTitle || "Untitled Resume",
+    };
+
+    set({ isSaving: true, saveError: null });
+
+    try {
+      const response = await createOrUpdateResume(request);
+      if (response.success && response.resume_id) {
+        set({ resumeId: response.resume_id, isSaving: false });
+      }
+      return response;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to save resume";
+      set({ saveError: errorMessage, isSaving: false });
+      return null;
+    }
+  },
+
   resetStore: () =>
     set({
       resumeId: "",
+      resumeTitle: "",
+      jobId: null,
       resumeData: {
         personalInfo: {
-          name: "",
-          email: "",
-          phone: "",
-          linkedin: "",
-          github: "",
+          ...useAccountStore.getState().user,
+          name: `${useAccountStore.getState().user.first_name} ${useAccountStore.getState().user.last_name}`.trim(),
         },
         education: [
           {
@@ -195,6 +258,8 @@ export const useResumeStore = create<ResumeStore>((set) => ({
       pdfPreviewURL: null,
       compileError: null,
       isPdfGenerating: false,
+      isSaving: false,
+      saveError: null,
     }),
 }));
 

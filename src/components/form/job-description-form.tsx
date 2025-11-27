@@ -11,11 +11,8 @@ import { Label } from "@/components/ui/Label";
 
 export default function JobAnalysisForm() {
   // Job Description State
- 
-  const { resumeId } = useResumeStore();
-  const resumeName = useResumeStore((s) =>
-    s.resumeData?.personalInfo?.name ?? ""
-  );
+
+  const { resumeId, resumeTitle, setResumeTitle } = useResumeStore();
   const [jobDescription, setJobDescription] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +20,6 @@ export default function JobAnalysisForm() {
   // Keywords State from Store
   const keywordsData = useKeywordsStore((state) => state.keywordsData);
   const toggleKeyword = useKeywordsStore((state) => state.toggleKeyword);
-
-  
 
   const handleAnalyze = useCallback(async () => {
     if (!jobDescription.trim()) {
@@ -62,27 +57,30 @@ export default function JobAnalysisForm() {
         })),
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred",
+      );
       console.error("Error analyzing job description:", err);
     } finally {
       setIsAnalyzing(false);
     }
   }, [jobDescription, resumeId]);
 
-  
   const isFormValid = jobDescription.trim() !== "";
   const hasKeywords = keywordsData.length > 0;
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
       <div className="w-full max-w-5xl space-y-6">
-        
         {/* Section 1: Name Resume Section - Title and Content Side by Side */}
         <div className="border-b border-gray-300 p-6 md:p-8">
           <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
             {/* Left: Title and Description */}
             <div className="space-y-2">
-              <h2 className="text-lg font-bold text-gray-900 md:text-xl">Name your Resume</h2>
+              <h2 className="text-lg font-bold text-gray-900 md:text-xl">
+                Name your Resume
+                <span className="ml-2 text-red-500">*</span>
+              </h2>
               <p className="text-sm text-gray-600">
                 Give your resume a name to help you stand out
               </p>
@@ -93,16 +91,8 @@ export default function JobAnalysisForm() {
                 <Input
                   label="Title"
                   type="text"
-                  value={resumeName}
-                  onChange={(e) =>
-                    useResumeStore.getState().setResumeData((prev) => ({
-                      ...prev,
-                      personalInfo: {
-                        ...prev.personalInfo,
-                        name: e.target.value,
-                      },
-                    }))
-                  }
+                  value={resumeTitle}
+                  onChange={(e) => setResumeTitle(e.target.value)}
                   placeholder="Resume title or name"
                   aria-label="Resume title"
                 />
@@ -122,8 +112,8 @@ export default function JobAnalysisForm() {
                 <span className="ml-2 text-red-500">*</span>
               </h2>
               <p className="text-sm text-gray-600">
-                Paste your target job description so we can extract keywords
-                and recommend content for your resume.
+                Paste your target job description so we can extract keywords and
+                recommend content for your resume.
               </p>
             </div>
 
