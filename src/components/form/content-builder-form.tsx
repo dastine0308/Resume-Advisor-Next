@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -26,6 +26,7 @@ import type {
   Project,
   Leadership,
 } from "@/types/resume";
+import type { Keyword } from "@/types/keywords";
 import { generateLaTeXPreviewURL } from "@/lib/latex-client";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import { MagicWandIcon } from "@radix-ui/react-icons";
@@ -54,6 +55,64 @@ export default function ContentBuilderForm() {
     { id: "technical-skills", label: "Skills", active: false },
     { id: "leadership", label: "Leadership", active: false },
   ]);
+
+  // AI Enrichment state
+  const [enrichingItemId, setEnrichingItemId] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [loadingKeywords, setLoadingKeywords] = useState(false);
+
+  // Get selected keywords from store (memoized to prevent infinite loop)
+  const keywordsData = useKeywordsStore((state) => state.keywordsData);
+  const selectedKeywords = useMemo(
+    () => keywordsData.filter((k) => k.selected).map((k) => k.label),
+    [keywordsData],
+  );
+
+  // Load keywords from backend job posting when component mounts
+  useEffect(() => {
+    const loadJobKeywords = async () => {
+      const { jobId } = useResumeStore.getState();
+      
+      if (!jobId) {
+        // No job posting linked - keywords will be empty (optional)
+        console.log('[Content Builder] No job_id - proceeding without keywords');
+        return;
+      }
+
+      setLoadingKeywords(true);
+      try {
+        console.log(`[Content Builder] Fetching keywords from job posting ${jobId}`);
+        
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/job-postings/${jobId}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch job posting');
+        }
+
+        const data = await response.json();
+        const selectedRequirements = data.data?.selected_requirements || [];
+        
+        // Transform to Keyword format
+        const keywords: Keyword[] = selectedRequirements.map((label: string, index: number) => ({
+          id: `${jobId}-${index}`,
+          label,
+          selected: true, // Pre-select all keywords from database
+        }));
+        
+        useKeywordsStore.getState().setJobId(jobId);
+        useKeywordsStore.getState().setKeywordsData(keywords);
+        
+        console.log(`[Content Builder] Loaded ${keywords.length} keywords from database`);
+      } catch (error) {
+        console.error('[Content Builder] Failed to load job keywords:', error);
+        // Silently fail - user can still enrich without keywords
+      } finally {
+        setLoadingKeywords(false);
+      }
+    };
+
+    loadJobKeywords();
+  }, [resumeId]); // Re-run if resumeId changes
 
   const updateEducation = (
     id: string,
@@ -301,6 +360,106 @@ export default function ContentBuilderForm() {
       setCompileError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // AI Enrichment handler
+  const handleEnrichDescription = async (
+    sectionType: "experience" | "project" | "leadership",
+    itemId: string,
+    description: string,
+  ) => {
+    console.log('[Enrich] Starting enrichment:', { sectionType, itemId, descLength: description.length, keywords: selectedKeywords });
+    setEnrichingItemId(itemId);
+    setEnrichError(null);
+
+    try {
+      const response = await fetch("/api/enrich-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionType,
+          description,
+          keywords: selectedKeywords,
+        }),
+      });
+
+      console.log('[Enrich] Response status:', response.status, response.ok);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Enrich] Error response:', errorText);
+        throw new Error("Failed to enrich description");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let chunkCount = 0;
+
+      if (reader) {
+        console.log('[Enrich] Starting to read stream...');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log('[Enrich] Stream complete. Total chunks:', chunkCount);
+            break;
+          }
+
+          chunkCount++;
+          const chunk = decoder.decode(value, { stream: true });
+          console.log(`[Enrich] Chunk ${chunkCount}:`, chunk.substring(0, 100));
+          
+          // toTextStreamResponse() sends data in format: "0:{\"enhanced_description\":\"text\"}\n"
+          const lines = chunk.split("\n");
+          console.log('[Enrich] Lines in chunk:', lines.length);
+
+          for (const line of lines) {
+            if (line.trim() === "") continue;
+            
+            console.log('[Enrich] Processing line:', line.substring(0, 100));
+            
+            // Parse the streamed object updates
+            if (line.startsWith("0:")) {
+              try {
+                const jsonStr = line.slice(2);
+                const parsed = JSON.parse(jsonStr);
+                
+                console.log('[Enrich] Parsed object:', parsed);
+                
+                // Extract the enhanced_description field
+                if (parsed.enhanced_description !== undefined) {
+                  accumulatedText = parsed.enhanced_description;
+                  
+                  console.log('[Enrich] Updated text length:', accumulatedText.length);
+                  console.log('[Enrich] Text preview:', accumulatedText.substring(0, 100));
+                  
+                  // Update the description in real-time
+                  if (sectionType === "experience") {
+                    updateExperience(itemId, "description", accumulatedText);
+                  } else if (sectionType === "project") {
+                    updateProject(itemId, "description", accumulatedText);
+                  } else if (sectionType === "leadership") {
+                    updateLeadership(itemId, "description", accumulatedText);
+                  }
+                }
+              } catch (e) {
+                console.error('[Enrich] Parse error:', e, 'for line:', line.substring(0, 100));
+              }
+            }
+          }
+        }
+      }
+      
+      console.log('[Enrich] Final enriched text length:', accumulatedText.length);
+      console.log('[Enrich] Final text:', accumulatedText);
+    } catch (error) {
+      console.error("Error enriching description:", error);
+      setEnrichError(
+        error instanceof Error ? error.message : "Failed to enrich description",
+      );
+    } finally {
+      setEnrichingItemId(null);
     }
   };
 
@@ -618,9 +777,29 @@ export default function ContentBuilderForm() {
                                 <Button
                                   variant="primary"
                                   className="mt-2 flex w-48 items-center justify-center gap-2"
+                                  onClick={() =>
+                                    handleEnrichDescription(
+                                      "experience",
+                                      (item as Experience).id,
+                                      (item as Experience).description,
+                                    )
+                                  }
+                                  disabled={
+                                    enrichingItemId === (item as Experience).id ||
+                                    !(item as Experience).description.trim()
+                                  }
                                 >
-                                  <MagicWandIcon /> Enrich with AI
+                                  <MagicWandIcon />
+                                  {enrichingItemId === (item as Experience).id
+                                    ? "Enriching..."
+                                    : "Enrich with AI"}
                                 </Button>
+                                {enrichError &&
+                                  enrichingItemId === (item as Experience).id && (
+                                    <p className="mt-1 text-sm text-red-600">
+                                      {enrichError}
+                                    </p>
+                                  )}
                               </>
                             )}
                           />
@@ -730,6 +909,32 @@ export default function ContentBuilderForm() {
                                   }
                                   type="textarea"
                                 />
+                                <Button
+                                  variant="primary"
+                                  className="mt-2 flex w-48 items-center justify-center gap-2"
+                                  onClick={() =>
+                                    handleEnrichDescription(
+                                      "project",
+                                      (item as Project).id,
+                                      (item as Project).description,
+                                    )
+                                  }
+                                  disabled={
+                                    enrichingItemId === (item as Project).id ||
+                                    !(item as Project).description.trim()
+                                  }
+                                >
+                                  <MagicWandIcon />
+                                  {enrichingItemId === (item as Project).id
+                                    ? "Enriching..."
+                                    : "Enrich with AI"}
+                                </Button>
+                                {enrichError &&
+                                  enrichingItemId === (item as Project).id && (
+                                    <p className="mt-1 text-sm text-red-600">
+                                      {enrichError}
+                                    </p>
+                                  )}
                               </>
                             )}
                           />
@@ -890,6 +1095,32 @@ export default function ContentBuilderForm() {
                                   }
                                   type="textarea"
                                 />
+                                <Button
+                                  variant="primary"
+                                  className="mt-2 flex w-48 items-center justify-center gap-2"
+                                  onClick={() =>
+                                    handleEnrichDescription(
+                                      "leadership",
+                                      (item as Leadership).id,
+                                      (item as Leadership).description,
+                                    )
+                                  }
+                                  disabled={
+                                    enrichingItemId === (item as Leadership).id ||
+                                    !(item as Leadership).description.trim()
+                                  }
+                                >
+                                  <MagicWandIcon />
+                                  {enrichingItemId === (item as Leadership).id
+                                    ? "Enriching..."
+                                    : "Enrich with AI"}
+                                </Button>
+                                {enrichError &&
+                                  enrichingItemId === (item as Leadership).id && (
+                                    <p className="mt-1 text-sm text-red-600">
+                                      {enrichError}
+                                    </p>
+                                  )}
                               </>
                             )}
                           />

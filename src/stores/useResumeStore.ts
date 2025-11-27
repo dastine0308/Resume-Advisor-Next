@@ -5,6 +5,9 @@ interface ResumeStore {
   resumeId: string;
   setResumeId: (id: string) => void;
 
+  jobId: string | null;
+  setJobId: (id: string | null) => void;
+
   resumeData: ResumeData;
   setResumeData: (d: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
 
@@ -35,6 +38,9 @@ interface ResumeStore {
 export const useResumeStore = create<ResumeStore>((set) => ({
   resumeId: "",
   setResumeId: (id) => set({ resumeId: id }),
+
+  jobId: null,
+  setJobId: (id) => set({ jobId: id }),
 
   currentStep: 1,
   setCurrentStep: (step) => set({ currentStep: step }),
@@ -128,6 +134,7 @@ export const useResumeStore = create<ResumeStore>((set) => ({
   resetStore: () =>
     set({
       resumeId: "",
+      jobId: null,
       resumeData: {
         personalInfo: {
           name: "",

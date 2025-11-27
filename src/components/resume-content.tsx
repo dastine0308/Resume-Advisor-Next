@@ -19,15 +19,24 @@ export function ResumeContent({
   resumeData: initialResumeData,
 }: ResumeContentProps) {
   const router = useRouter();
-  const { setResumeId, setResumeData, currentStep, setCurrentStep } =
+  const { setResumeId, setJobId, setResumeData, currentStep, setCurrentStep } =
     useResumeStore();
 
   useEffect(() => {
     setResumeId(initialResumeId || "");
     if (initialResumeData) {
       setResumeData(initialResumeData);
+      
+      // Set jobId if resume has one (backend returns job_id field)
+      const jobId = (initialResumeData as any).job_id;
+      if (jobId) {
+        setJobId(String(jobId));
+        console.log('[Resume Content] Set jobId:', jobId);
+      } else {
+        console.log('[Resume Content] No job_id in resume data');
+      }
     }
-  }, [initialResumeId, initialResumeData]);
+  }, [initialResumeId, initialResumeData, setResumeId, setJobId, setResumeData]);
 
   useEffect(() => {
     return () => {
