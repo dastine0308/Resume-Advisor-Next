@@ -128,7 +128,10 @@ export default function JobAnalysisForm() {
                 <Textarea
                   label="Job Description"
                   value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setJobDescription(text);
+                  }}
                   placeholder="Paste job description here..."
                   className="min-h-[120px]"
                   aria-label="Job description text area"
