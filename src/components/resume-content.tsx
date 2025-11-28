@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { ProgressBar } from "@/components/resume/ProgressBar";
-import { useResumeStore, useJobPostingStore } from "@/stores";
+import { useResumeStore, useJobPostingStore, useAccountStore } from "@/stores";
 import { generateLatexFromData } from "@/lib/latex-generator";
 import ContentBuilderForm from "@/components/form/content-builder-form";
 import JobAnalysisForm from "@/components/form/job-description-form";
@@ -83,8 +83,27 @@ export function ResumeContent({
       // Editing existing resume
       setResumeId(initialResumeId);
       fetchResumeData();
+    } else {
+      // Creating new resume - initialize personal info from account store
+      const user = useAccountStore.getState().user;
+      if (user.first_name || user.last_name) {
+        setResumeData(
+          (prev) => ({
+            ...prev,
+            personalInfo: {
+              ...prev.personalInfo,
+              name: `${user.first_name} ${user.last_name}`.trim(),
+              email: user.email || prev.personalInfo.email,
+              phone: user.phone || prev.personalInfo.phone,
+              linkedin: user.linkedin || prev.personalInfo.linkedin,
+              github: user.github || prev.personalInfo.github,
+            },
+          }),
+          false,
+        );
+      }
     }
-  }, [initialResumeId, setResumeId, fetchResumeData]);
+  }, [initialResumeId, setResumeId, fetchResumeData, setResumeData]);
 
   // Debounced auto-save: saves 2 seconds after user stops editing
   const debouncedSaveJobPosting = useDebouncedCallback(async () => {
