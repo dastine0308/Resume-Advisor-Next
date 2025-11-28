@@ -12,13 +12,17 @@ interface ResumeStore {
   setResumeId: (id: string) => void;
 
   resumeTitle: string;
-  setResumeTitle: (title: string) => void;
+  setResumeTitle: (title: string, markDirty?: boolean) => void;
 
   jobId: number | null;
   setJobId: (id: number | null) => void;
 
   resumeData: ResumeData;
-  setResumeData: (d: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
+  setResumeData: (d: ResumeData | ((prev: ResumeData) => ResumeData), markDirty?: boolean) => void;
+
+  // Track if user has made modifications (for auto-save)
+  isDirty: boolean;
+  setIsDirty: (v: boolean) => void;
 
   currentStep: number;
   setCurrentStep: (step: number) => void;
@@ -54,10 +58,13 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   setResumeId: (id) => set({ resumeId: id }),
 
   resumeTitle: "",
-  setResumeTitle: (title) => set({ resumeTitle: title }),
+  setResumeTitle: (title, markDirty = true) => set({ resumeTitle: title, ...(markDirty && { isDirty: true }) }),
 
   jobId: null,
   setJobId: (id) => set({ jobId: id }),
+
+  isDirty: false,
+  setIsDirty: (v) => set({ isDirty: v }),
 
   currentStep: 1,
   setCurrentStep: (step) => set({ currentStep: step }),
@@ -123,12 +130,13 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
     },
   },
 
-  setResumeData: (d) =>
+  setResumeData: (d, markDirty = true) =>
     set((state) => ({
       resumeData:
         typeof d === "function"
           ? (d as (p: ResumeData) => ResumeData)(state.resumeData)
           : d,
+      ...(markDirty && { isDirty: true }),
     })),
 
   latex: "",
@@ -193,6 +201,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
       resumeId: "",
       resumeTitle: "",
       jobId: null,
+      isDirty: false,
       resumeData: {
         personalInfo: {
           ...useAccountStore.getState().user,

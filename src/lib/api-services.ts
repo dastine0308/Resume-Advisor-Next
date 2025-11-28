@@ -233,8 +233,7 @@ export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
  * Get a specific cover letter by ID
  */
 export async function getCoverLetterById(id: string): Promise<CoverLetter> {
-  const response = await api.get<{ success: boolean; data: CoverLetter }>(`/cover-letters/${id}`);
-  return response.data;
+  return api.get<CoverLetter>(`/cover-letters/${id}`);
 }
 
 /**
@@ -249,6 +248,10 @@ export async function createOrUpdateCoverLetter(
 /**
  * Delete a specific cover letter by ID
  */
-export async function deleteCoverLetter(id: string): Promise<{ success: boolean; message: string }> {
-  return api.delete<{ success: boolean; message: string }>(`/cover-letters/${id}`);
+export async function deleteCoverLetter(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return api.delete<{ success: boolean; message: string }>(
+    `/cover-letters/${id}`,
+  );
 }

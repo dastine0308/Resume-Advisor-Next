@@ -11,11 +11,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 export default function SignUpForm() {
   const passwordSchema = z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must include an uppercase letter")
-    .regex(/[a-z]/, "Password must include a lowercase letter")
-    .regex(/[0-9]/, "Password must include a number")
-    .regex(/[^A-Za-z0-9]/, "Password must include a special character");
+    .min(6, "Password must be at least 6 characters");
 
   const {
     signupForm: form,
@@ -85,8 +81,7 @@ export default function SignUpForm() {
           placeholder="Create a password"
         />
         <p className="text-xs text-gray-500">
-          Password must be at least 8 characters and include an uppercase
-          letter, lowercase letter, number, and special character.
+          Password must be at least 6 characters.
         </p>
 
         <PasswordInput

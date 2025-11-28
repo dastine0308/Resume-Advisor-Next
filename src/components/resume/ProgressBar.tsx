@@ -7,8 +7,14 @@ interface ProgressBarProps {
   totalSteps: number;
   steps: {
     label: string;
-    backButtonLabel?: string;
-    nextButtonLabel?: string;
+    backButton?: {
+      label: string;
+      isDisabled?: boolean;
+    };
+    nextButton?: {
+      label: string;
+      isDisabled?: boolean;
+    };
   }[];
   className?: string;
   onBack?: () => void;
@@ -38,18 +44,22 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           style={{ width: `${percentage}%` }}
         />
       </div>
-      {(steps?.some((step) => step.backButtonLabel) ||
-        steps?.some((step) => step.nextButtonLabel)) && (
+      {(steps?.some((step) => step.backButton) ||
+        steps?.some((step) => step.nextButton)) && (
         <div className="mt-4 flex justify-between">
-          <Button variant="outline" onClick={onBack} disabled={!onBack}>
-            {steps[currentStep - 1]?.backButtonLabel}
+          <Button
+            variant="outline"
+            onClick={onBack}
+            disabled={!onBack || steps[currentStep - 1]?.backButton?.isDisabled}
+          >
+            {steps[currentStep - 1]?.backButton?.label}
           </Button>
           <Button
             onClick={onNext}
-            disabled={!onNext}
+            disabled={!onNext || steps[currentStep - 1]?.nextButton?.isDisabled}
             className="rounded bg-indigo-500 px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            {steps[currentStep - 1]?.nextButtonLabel}
+            {steps[currentStep - 1]?.nextButton?.label}
           </Button>
         </div>
       )}

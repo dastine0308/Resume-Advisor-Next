@@ -39,6 +39,16 @@ interface ResumeData {
   };
 }
 
+interface PersonalInfo {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  github?: string;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -54,6 +64,7 @@ export async function POST(req: Request) {
       tone,
       userPrompt,
       closing,
+      personalInfo,
     } = body as {
       resumeData: ResumeData;
       keywords?: string[];
@@ -66,6 +77,7 @@ export async function POST(req: Request) {
       tone: string;
       userPrompt: string;
       closing?: string;
+      personalInfo?: PersonalInfo;
     };
 
     // Validate required fields
@@ -83,15 +95,20 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!["Professional", "Friendly", "Concise"].includes(tone)) {
+    if (
+      !["Professional", "Friendly", "Enthusiastic", "Formal"].includes(tone)
+    ) {
       return Response.json(
-        { error: "Invalid tone. Must be Professional, Friendly, or Concise" },
+        {
+          error:
+            "Invalid tone. Must be Professional, Friendly, Enthusiastic, or Formal",
+        },
         { status: 400 },
       );
     }
 
     // Build context from resume data
-    const resumeContext = buildResumeContext(resumeData);
+    const resumeContext = buildResumeContext(resumeData, personalInfo);
 
     // Build the prompt based on tone
     const systemPrompt = buildSystemPrompt(tone);
@@ -125,7 +142,7 @@ export async function POST(req: Request) {
           }
           controller.close();
         } catch (error) {
-          console.error('Stream error:', error);
+          console.error("Stream error:", error);
           controller.error(error);
         }
       },
@@ -133,8 +150,8 @@ export async function POST(req: Request) {
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
       },
     });
   } catch (error) {
@@ -150,7 +167,8 @@ function buildSystemPrompt(tone: string): string {
   const toneInstructions = {
     Professional: `Write in a formal, professional tone. Use sophisticated language, maintain a respectful distance, and focus on qualifications and achievements. Avoid casual language and contractions.`,
     Friendly: `Write in a warm, personable tone while maintaining professionalism. Use a conversational style that shows enthusiasm and personality. You can use occasional contractions and show genuine interest.`,
-    Concise: `Write in a direct, efficient tone. Keep paragraphs short and to the point. Eliminate unnecessary words while maintaining professionalism. Focus on key qualifications and impact.`,
+    Enthusiastic: `Write in an energetic, passionate tone. Show excitement about the role and company. Use positive language and exclamation points where appropriate. Highlight eagerness to contribute and grow with the organization.`,
+    Formal: `Write in a very formal and traditional tone. Use polite and respectful language throughout. Avoid contractions and slang. Focus on qualifications, experience, and a strong closing statement.`,
   };
 
   return `You are an expert cover letter writer helping job seekers create compelling, tailored cover letters.
@@ -184,7 +202,16 @@ interface UserMessageParams {
 }
 
 function buildUserMessage(params: UserMessageParams): string {
-  const { recipient, company, position, userPrompt, closing, resumeContext, keywords, jobDescription } = params;
+  const {
+    recipient,
+    company,
+    position,
+    userPrompt,
+    closing,
+    resumeContext,
+    keywords,
+    jobDescription,
+  } = params;
 
   return `Generate a cover letter with the following details:
 
@@ -203,16 +230,35 @@ ${keywords.length > 0 ? `Target Keywords (incorporate naturally if relevant):\n$
 Write a compelling cover letter that addresses the user's instructions while showcasing relevant qualifications from their resume${jobDescription ? " and aligning with the job description requirements" : ""}.`;
 }
 
-function buildResumeContext(resumeData: ResumeData): string {
+function buildResumeContext(resumeData: ResumeData, personalInfo?: PersonalInfo): string {
   const sections: string[] = [];
 
-  // Personal Info
+  // Personal Info from account
+  if (personalInfo) {
+    const name = [personalInfo.firstName, personalInfo.lastName].filter(Boolean).join(" ");
+    if (name) {
+      sections.push("Personal Information:");
+      sections.push(`- Name: ${name}`);
+      if (personalInfo.email) sections.push(`- Email: ${personalInfo.email}`);
+      if (personalInfo.phone) sections.push(`- Phone: ${personalInfo.phone}`);
+      if (personalInfo.location) sections.push(`- Location: ${personalInfo.location}`);
+      if (personalInfo.linkedin) sections.push(`- LinkedIn: ${personalInfo.linkedin}`);
+      if (personalInfo.github) sections.push(`- GitHub: ${personalInfo.github}`);
+      sections.push("");
+    }
+  }
+
   if (resumeData.sections) {
     // Work Experience
-    if (resumeData.sections.work_experience && resumeData.sections.work_experience.length > 0) {
+    if (
+      resumeData.sections.work_experience &&
+      resumeData.sections.work_experience.length > 0
+    ) {
       sections.push("Work Experience:");
       resumeData.sections.work_experience.forEach((exp) => {
-        sections.push(`- ${exp.jobTitle || exp.job_title} at ${exp.company} (${exp.dates})`);
+        sections.push(
+          `- ${exp.jobTitle || exp.job_title} at ${exp.company} (${exp.dates})`,
+        );
         if (exp.description) {
           sections.push(`  ${exp.description.substring(0, 200)}...`);
         }
@@ -220,10 +266,15 @@ function buildResumeContext(resumeData: ResumeData): string {
     }
 
     // Projects
-    if (resumeData.sections.projects && resumeData.sections.projects.length > 0) {
+    if (
+      resumeData.sections.projects &&
+      resumeData.sections.projects.length > 0
+    ) {
       sections.push("\nProjects:");
       resumeData.sections.projects.forEach((proj) => {
-        sections.push(`- ${proj.projectName || proj.project_name}: ${proj.technologies}`);
+        sections.push(
+          `- ${proj.projectName || proj.project_name}: ${proj.technologies}`,
+        );
         if (proj.description) {
           sections.push(`  ${proj.description.substring(0, 150)}...`);
         }
@@ -231,7 +282,10 @@ function buildResumeContext(resumeData: ResumeData): string {
     }
 
     // Leadership
-    if (resumeData.sections.leadership && resumeData.sections.leadership.length > 0) {
+    if (
+      resumeData.sections.leadership &&
+      resumeData.sections.leadership.length > 0
+    ) {
       sections.push("\nLeadership:");
       resumeData.sections.leadership.forEach((lead) => {
         sections.push(`- ${lead.role} at ${lead.organization} (${lead.dates})`);
@@ -242,10 +296,15 @@ function buildResumeContext(resumeData: ResumeData): string {
     }
 
     // Education
-    if (resumeData.sections.education && resumeData.sections.education.length > 0) {
+    if (
+      resumeData.sections.education &&
+      resumeData.sections.education.length > 0
+    ) {
       sections.push("\nEducation:");
       resumeData.sections.education.forEach((edu) => {
-        sections.push(`- ${edu.degree} from ${edu.universityName || edu.university_name} (${edu.datesAttended || edu.dates_attended})`);
+        sections.push(
+          `- ${edu.degree} from ${edu.universityName || edu.university_name} (${edu.datesAttended || edu.dates_attended})`,
+        );
       });
     }
 
@@ -256,7 +315,8 @@ function buildResumeContext(resumeData: ResumeData): string {
       if (skills.languages) skillsList.push(skills.languages);
       const devTools = skills.developerTools || skills.developer_tools;
       if (devTools) skillsList.push(devTools);
-      const techFrameworks = skills.technologiesFrameworks || skills.technologies_frameworks;
+      const techFrameworks =
+        skills.technologiesFrameworks || skills.technologies_frameworks;
       if (techFrameworks) skillsList.push(techFrameworks);
 
       if (skillsList.length > 0) {

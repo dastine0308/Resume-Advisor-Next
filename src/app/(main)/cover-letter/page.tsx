@@ -1,28 +1,30 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { Button, Dropdown } from "@/components/ui";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { useRouter } from "next/navigation";
 import { Label } from "@/components/ui/Label";
-import { getUserResumes, getResumeById } from "@/lib/api-services";
-import { useCoverLetterStore } from "@/stores";
+import {
+  getUserResumes,
+  getResumeById,
+  getCoverLetterById,
+} from "@/lib/api-services";
+import { useCoverLetterStore, useAccountStore } from "@/stores";
 import { toast } from "sonner";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronDownIcon } from "@radix-ui/react-icons";
 
-export default function CoverLetterPage() {
+function CoverLetterPageContent() {
   const router = useRouter();
-  const [recipient, setRecipient] = useState("");
-  const [company, setCompany] = useState("");
-  const [position, setPosition] = useState("");
-  const [tone, setTone] = useState("Professional");
+  const searchParams = useSearchParams();
+  const initialCoverLetterId = searchParams.get("id");
+
   const [resumeTitle, setResumeTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [closing, setClosing] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [resumeList, setResumeList] = useState<
     { id: string; jobId: number; title: string; modifiedDate: string }[]
   >([]);
@@ -34,15 +36,31 @@ export default function CoverLetterPage() {
     setTitle,
     setContent,
     content,
+    generatedContent,
+    setGeneratedContent,
+    coverLetterId,
+    setCoverLetterId,
   } = useCoverLetterStore();
 
+  const { user } = useAccountStore();
+
+  // Helper to update content fields
+  const updateContentField = <K extends keyof typeof content>(
+    field: K,
+    value: (typeof content)[K],
+  ) => {
+    setIsDirty(true);
+    setContent((prev) => ({ ...prev, [field]: value }));
+  };
+
   const toneList = [
-    { tone: "Professional" },
-    { tone: "Friendly" },
-    { tone: "Concise" },
+    { tone: "Professional" as const },
+    { tone: "Friendly" as const },
+    { tone: "Enthusiastic" as const },
+    { tone: "Formal" as const },
   ];
 
-  const canGenerate = !!resumeId && prompt.trim() !== "";
+  const canGenerate = !!resumeId && content?.descriptive_prompt?.trim() !== "";
 
   useEffect(() => {
     async function fetchResumes() {
@@ -64,13 +82,44 @@ export default function CoverLetterPage() {
             )
           : [];
         setResumeList(list);
+        return list;
       } catch (error) {
         console.error("Failed to fetch resumes:", error);
+        return [];
       }
     }
 
-    fetchResumes();
-  }, []);
+    async function loadData() {
+      const list = await fetchResumes();
+
+      if (initialCoverLetterId) {
+        setCoverLetterId(Number(initialCoverLetterId));
+        try {
+          const data = await getCoverLetterById(initialCoverLetterId);
+          if (data) {
+            setTitle(data.title);
+            const matchedResume = list.find(
+              (r: { jobId: number }) => r.jobId === data.job_id,
+            );
+            if (matchedResume) {
+              setResumeId(matchedResume.id);
+              setResumeTitle(matchedResume.title);
+            }
+            setJobId(data.job_id);
+            setContent(data.content);
+            const generatedText = data.content.paragraphs.join("\n\n");
+            setGeneratedContent(generatedText);
+            setIsEditing(true);
+          }
+        } catch (error) {
+          console.error("Failed to fetch cover letter:", error);
+        }
+      }
+    }
+
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverLetterId]);
 
   // Handle resume selection
   const handleResumeSelect = async (resume: {
@@ -85,7 +134,7 @@ export default function CoverLetterPage() {
 
   // Stream AI-generated cover letter
   const handleGenerate = async () => {
-    if (!resumeId || !prompt.trim()) {
+    if (!resumeId || !content?.descriptive_prompt?.trim()) {
       toast.error("Please select a resume and provide a descriptive prompt");
       return;
     }
@@ -95,7 +144,7 @@ export default function CoverLetterPage() {
     setIsEditing(false);
 
     // Set title before generation for auto-save
-    const coverLetterTitle = `${company || "Cover Letter"} - ${position || "Position"}`;
+    const coverLetterTitle = `${content.company || "Cover Letter"} - ${content.position || "Position"}`;
     setTitle(coverLetterTitle);
 
     try {
@@ -107,12 +156,12 @@ export default function CoverLetterPage() {
       let jobDescription = "";
       let jobCompany = "";
       let jobPosition = "";
-      
+
       if (resumeData.job_id) {
         try {
           const { getJobPosting } = await import("@/lib/api-services");
           const jobPosting = await getJobPosting(resumeData.job_id.toString());
-          
+
           keywords = jobPosting?.selected_requirements || [];
           jobDescription = jobPosting?.description || "";
           jobCompany = jobPosting?.company_name || "";
@@ -131,12 +180,21 @@ export default function CoverLetterPage() {
           jobDescription,
           jobCompany,
           jobPosition,
-          recipient: recipient || "Hiring Manager",
-          company: company || "",
-          position: position || "",
-          tone,
-          userPrompt: prompt,
-          closing: closing || "Your Name",
+          recipient: content?.recipient || "Hiring Manager",
+          company: content?.company || "",
+          position: content?.position || "",
+          tone: content?.tone || "Professional",
+          userPrompt: content?.descriptive_prompt || "",
+          closing: content?.closing_signature || "Your Name",
+          personalInfo: {
+            firstName: user.first_name,
+            lastName: user.last_name,
+            email: user.email,
+            phone: user.phone,
+            location: user.location,
+            linkedin: user.linkedin,
+            github: user.github,
+          },
         }),
       });
 
@@ -180,14 +238,25 @@ export default function CoverLetterPage() {
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 
-      // Update store with generated content
-      setContent({ paragraphs });
-      
+      // TEST:
+      // const test = [
+      //   "[Your Address]  \n[City, State, Zip]  \n[Email Address]  \n[Phone Number]  \n[Date]",
+      //   "Hiring Manager  \n[Company Name]  \n[Company Address]  \n[City, State, Zip]",
+      //   "Dear Hiring Manager,",
+      //   "I am writing to express my interest in the Senior Software Engineer position at [Company Name], as advertised. With a Bachelor of Science in Computer Science from the University of Calgary and relevant experience in software development, I am confident in my ability to contribute effectively to your team. My background includes solid foundational knowledge in programming, particularly within Python, as well as exposure to essential technologies such as AWS and Docker.",
+      //   "During my tenure as a Software Engineer Intern at the University of Calgary, I was responsible for designing and implementing a comprehensive coding curriculum that enabled secondary school students to grasp complex programming concepts in languages including Python. This experience not only honed my technical skills but also reinforced my ability to communicate effectively with diverse audiences—a crucial competency for any collaborative engineering team.",
+      //   "Moreover, my academic projects have provided me with a robust understanding of software development methodologies, including hands-on experience with Docker. I appreciate the importance of containerization in modern software engineering, especially within cloud environments like AWS. I am eager to apply my knowledge of these technologies to develop scalable and efficient solutions that align with [Company Name]'s strategic goals.",
+      //   "I am particularly drawn to [Company Name] due to its commitment to innovation and excellence in the tech industry. I am enthusiastic about the opportunity to bring my unique expertise to your esteemed organization and contribute to projects that drive impactful results.",
+      //   "Thank you for considering my application. I look forward to the possibility of discussing how my skills and experiences align with the needs of your team.",
+      //   "Sincerely,  \nYour Name",
+      // ];
+
+      // // Update store with generated content (preserve other content fields)
+      setContent((prev) => ({ ...prev, paragraphs: paragraphs }));
+
       toast.success("Cover letter generated successfully!");
       setIsEditing(true);
-
-      // Trigger save after generation
-      setTimeout(() => debouncedSave(), 100);
+      setIsDirty(true);
     } catch (error) {
       console.error("Generation error:", error);
       toast.error(
@@ -228,12 +297,12 @@ export default function CoverLetterPage() {
     }
   }, 2000);
 
-  // Trigger auto-save when content changes
+  // Trigger auto-save when content changes (only if user has made modifications)
   useEffect(() => {
-    if (content.paragraphs.length > 0) {
+    if (isDirty && content.paragraphs.length > 0) {
       debouncedSave();
     }
-  }, [content, debouncedSave]);
+  }, [content, isDirty, debouncedSave]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -245,12 +314,13 @@ export default function CoverLetterPage() {
 
   // Handle manual editing of generated content
   const handleEditContent = (newText: string) => {
+    setIsDirty(true);
     setGeneratedContent(newText);
     const paragraphs = newText
       .split("\n\n")
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
-    setContent({ paragraphs });
+    setContent((prev) => ({ ...prev, paragraphs }));
   };
 
   return (
@@ -276,8 +346,10 @@ export default function CoverLetterPage() {
                       <div>
                         <Label>Recipient</Label>
                         <Input
-                          value={recipient}
-                          onChange={(e) => setRecipient(e.target.value)}
+                          value={content.recipient}
+                          onChange={(e) =>
+                            updateContentField("recipient", e.target.value)
+                          }
                           placeholder="Hiring Manager"
                           aria-label="Recipient"
                         />
@@ -285,8 +357,10 @@ export default function CoverLetterPage() {
                       <div>
                         <Label>Company</Label>
                         <Input
-                          value={company}
-                          onChange={(e) => setCompany(e.target.value)}
+                          value={content.company}
+                          onChange={(e) =>
+                            updateContentField("company", e.target.value)
+                          }
                           placeholder="Company, Inc."
                           aria-label="Company"
                         />
@@ -297,8 +371,10 @@ export default function CoverLetterPage() {
                       <div>
                         <Label>Position</Label>
                         <Input
-                          value={position}
-                          onChange={(e) => setPosition(e.target.value)}
+                          value={content.position}
+                          onChange={(e) =>
+                            updateContentField("position", e.target.value)
+                          }
                           placeholder="Product Manager"
                           aria-label="Position"
                         />
@@ -310,14 +386,18 @@ export default function CoverLetterPage() {
                         <Label>Tone</Label>
                         <Dropdown
                           trigger={
-                            <Button variant="outline" className="w-full">
-                              {tone || "Select"}
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between border-gray-300 font-normal text-gray-700"
+                            >
+                              {content.tone || "Select"}
+                              <ChevronDownIcon className="ml-2 h-4 w-4" />
                             </Button>
                           }
                           items={toneList.map((r) => ({
                             label: r.tone,
                             value: r.tone,
-                            onClick: () => setTone(r.tone),
+                            onClick: () => updateContentField("tone", r.tone),
                           }))}
                         />
                       </div>
@@ -327,8 +407,13 @@ export default function CoverLetterPage() {
                         </Label>
                         <Dropdown
                           trigger={
-                            <Button variant="outline" className="w-full">
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between border-gray-300 font-normal text-gray-700"
+                              disabled={resumeList.length === 0}
+                            >
                               {resumeTitle || "Select a Resume"}
+                              <ChevronDownIcon className="ml-2 h-4 w-4" />
                             </Button>
                           }
                           items={resumeList.map((r) => ({
@@ -336,17 +421,24 @@ export default function CoverLetterPage() {
                             value: r.title,
                             onClick: () => handleResumeSelect(r),
                           }))}
+                          disabled={resumeList.length === 0}
                         />
                       </div>
                     </div>
 
                     <div>
                       <Label>
-                        Descriptive Prompt <span className="text-red-500">*</span>
+                        Descriptive Prompt{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Textarea
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
+                        value={content?.descriptive_prompt || ""}
+                        onChange={(e) =>
+                          updateContentField(
+                            "descriptive_prompt",
+                            e.target.value,
+                          )
+                        }
                         placeholder="Example: I want to emphasize my leadership experience and technical skills in cloud architecture. The tone should be enthusiastic and highlight my passion for innovation."
                         aria-label="Prompt"
                         className="min-h-[140px]"
@@ -356,8 +448,13 @@ export default function CoverLetterPage() {
                     <div>
                       <Label>Closing / Signature</Label>
                       <Input
-                        value={closing}
-                        onChange={(e) => setClosing(e.target.value)}
+                        value={content.closing_signature}
+                        onChange={(e) =>
+                          updateContentField(
+                            "closing_signature",
+                            e.target.value,
+                          )
+                        }
                         placeholder="Your name"
                         aria-label="Closing"
                       />
@@ -367,11 +464,6 @@ export default function CoverLetterPage() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          setRecipient("");
-                          setCompany("");
-                          setPosition("");
-                          setPrompt("");
-                          setClosing("");
                           setResumeTitle("");
                           setGeneratedContent("");
                           setIsEditing(false);
@@ -400,7 +492,9 @@ export default function CoverLetterPage() {
                     <h2 className="text-lg font-semibold text-gray-900">
                       {isEditing ? "Editable Preview" : "Live Preview"}
                     </h2>
-                    <span className="text-xs text-gray-500">Tone: {tone}</span>
+                    <span className="text-xs text-gray-500">
+                      Tone: {content.tone}
+                    </span>
                   </div>
 
                   <div className="mt-4 rounded border border-gray-100 bg-gray-50">
@@ -424,9 +518,10 @@ export default function CoverLetterPage() {
                   <div className="mt-4 flex gap-3">
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        navigator.clipboard?.writeText(generatedContent)
-                      }
+                      onClick={() => {
+                        navigator.clipboard?.writeText(generatedContent);
+                        toast.success("Copied to clipboard!");
+                      }}
                       className="w-full"
                       disabled={!generatedContent}
                     >
@@ -459,5 +554,13 @@ export default function CoverLetterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CoverLetterPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+      <CoverLetterPageContent />
+    </Suspense>
   );
 }

@@ -19,8 +19,18 @@ interface CoverLetterStore {
   jobId: number | null;
   setJobId: (id: number | null) => void;
 
+  prompt: string;
+  setPrompt: (prompt: string) => void;
+
   content: CoverLetterContent;
-  setContent: (content: CoverLetterContent | ((prev: CoverLetterContent) => CoverLetterContent)) => void;
+  setContent: (
+    content:
+      | CoverLetterContent
+      | ((prev: CoverLetterContent) => CoverLetterContent),
+  ) => void;
+
+  generatedContent: string;
+  setGeneratedContent: (content: string) => void;
 
   // Save cover letter to API
   isSaving: boolean;
@@ -33,6 +43,13 @@ interface CoverLetterStore {
 
 const initialContent: CoverLetterContent = {
   paragraphs: [],
+  closing_signature: "",
+  company: "",
+  descriptive_prompt: "",
+  position: "",
+  recipient: "",
+  resume_id: null,
+  tone: "Professional",
 };
 
 export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
@@ -48,12 +65,20 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
   jobId: null,
   setJobId: (id) => set({ jobId: id }),
 
+  prompt: "",
+  setPrompt: (prompt) => set({ prompt }),
+
+  generatedContent: "",
+  setGeneratedContent: (content) => set({ generatedContent: content }),
+
   content: initialContent,
   setContent: (content) =>
     set((state) => ({
       content:
         typeof content === "function"
-          ? (content as (p: CoverLetterContent) => CoverLetterContent)(state.content)
+          ? (content as (p: CoverLetterContent) => CoverLetterContent)(
+              state.content,
+            )
           : content,
     })),
 
@@ -107,6 +132,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
       resumeId: "",
       jobId: null,
       content: initialContent,
+      generatedContent: "",
       isSaving: false,
       saveError: null,
     }),

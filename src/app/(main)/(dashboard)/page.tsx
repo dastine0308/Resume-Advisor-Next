@@ -84,8 +84,8 @@ export default function DashboardPage() {
       // Navigate to the first step of the resume workflow using query param
       router.push(`/resume?resumeId=${encodeURIComponent(doc.id)}`);
     } else {
-      // Navigate to cover letter page (you can add cover letter editing later)
-      router.push(`/cover-letter`);
+      // Navigate to cover letter page with ID for editing
+      router.push(`/cover-letter?id=${encodeURIComponent(doc.id)}`);
     }
   };
 
@@ -192,7 +192,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {filteredDocuments.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-gray-50">
+                      <tr key={`${doc.type}-${doc.id}`} className="hover:bg-gray-50">
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="flex items-center gap-3">
                             <FileTextIcon className="h-5 w-5 text-gray-400" />
@@ -238,7 +238,7 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-3 md:hidden">
                 {filteredDocuments.map((doc) => (
                   <div
-                    key={doc.id}
+                    key={`${doc.type}-${doc.id}`}
                     className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
                   >
                     <div className="flex items-start justify-between">

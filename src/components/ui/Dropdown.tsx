@@ -11,9 +11,14 @@ export interface DropdownItem {
 interface DropdownProps {
   trigger: React.ReactNode;
   items: DropdownItem[];
+  disabled?: boolean;
 }
 
-export const Dropdown: React.FC<DropdownProps> = ({ trigger, items }) => {
+export const Dropdown: React.FC<DropdownProps> = ({
+  trigger,
+  items,
+  disabled,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +43,7 @@ export const Dropdown: React.FC<DropdownProps> = ({ trigger, items }) => {
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
-      <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
+      <div onClick={() => !disabled && setIsOpen(!isOpen)}>{trigger}</div>
 
       {isOpen && (
         <div className="absolute left-0 top-full z-10 mt-1 min-w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg">

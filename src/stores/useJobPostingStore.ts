@@ -9,13 +9,17 @@ import {
 
 interface JobPostingStore {
   jobDescription: string;
-  setJobDescription: (data: string) => void;
+  setJobDescription: (data: string, markDirty?: boolean) => void;
 
   selectedKeywords: string[];
-  setSelectedKeywords: (data: string[]) => void;
+  setSelectedKeywords: (data: string[], markDirty?: boolean) => void;
 
   jobPosting: JobPosting | null;
-  setJobPosting: (data: JobPosting | null) => void;
+  setJobPosting: (data: JobPosting | null, markDirty?: boolean) => void;
+
+  // Track if user has made modifications (for auto-save)
+  isDirty: boolean;
+  setIsDirty: (v: boolean) => void;
 
   isAutoSaving: boolean;
 
@@ -28,20 +32,23 @@ export const useJobPostingStore = create<JobPostingStore>()(
   persist(
     (set, get) => ({
       jobDescription: "",
-      setJobDescription: (data) => {
-        set({ jobDescription: data });
+      setJobDescription: (data, markDirty = true) => {
+        set({ jobDescription: data, ...(markDirty && { isDirty: true }) });
       },
 
       selectedKeywords: [],
       jobPosting: null,
       isAutoSaving: false,
+      isDirty: false,
 
-      setJobPosting: (data) => {
-        set({ jobPosting: data });
+      setIsDirty: (v) => set({ isDirty: v }),
+
+      setJobPosting: (data, markDirty = true) => {
+        set({ jobPosting: data, ...(markDirty && { isDirty: true }) });
       },
 
-      setSelectedKeywords: (data) => {
-        set({ selectedKeywords: data });
+      setSelectedKeywords: (data, markDirty = true) => {
+        set({ selectedKeywords: data, ...(markDirty && { isDirty: true }) });
       },
 
       resetStore: () => {
@@ -49,6 +56,7 @@ export const useJobPostingStore = create<JobPostingStore>()(
           selectedKeywords: [],
           jobPosting: null,
           jobDescription: "",
+          isDirty: false,
         });
       },
 

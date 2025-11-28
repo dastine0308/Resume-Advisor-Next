@@ -30,8 +30,9 @@ export function ResumeContent({
     setCurrentStep,
     setJobId,
     setResumeTitle,
+    isDirty: isResumeDirty,
   } = useResumeStore();
-  const { jobPosting, selectedKeywords, jobDescription } = useJobPostingStore();
+  const { jobPosting, selectedKeywords, jobDescription, isDirty: isJobPostingDirty } = useJobPostingStore();
 
   const fetchResumeData = useCallback(async () => {
     if (initialResumeId) {
@@ -40,9 +41,11 @@ export function ResumeContent({
       const response = await getResumeById(initialResumeId);
       if (response?.job_id) {
         setJobId(response.job_id);
-        setResumeTitle(response.title);
+        setResumeTitle(response.title, false);
+        // Use functional update to access current state without adding resumeData as dependency
+        const currentResumeData = useResumeStore.getState().resumeData;
         setResumeData({
-          personalInfo: resumeData?.personalInfo || {},
+          personalInfo: currentResumeData?.personalInfo || {},
           education: response?.sections?.education || [],
           experience: response?.sections?.work_experience || [],
           projects: response?.sections?.projects || [],
@@ -52,20 +55,20 @@ export function ResumeContent({
             developerTools: "",
             technologiesFrameworks: "",
           },
-        });
+        }, false);
 
         const jobPosting = await getJobPosting(response.job_id.toString());
-        useJobPostingStore.getState().setJobPosting(jobPosting);
+        useJobPostingStore.getState().setJobPosting(jobPosting, false);
         useJobPostingStore
           .getState()
-          .setSelectedKeywords(jobPosting?.selected_requirements || []);
+          .setSelectedKeywords(jobPosting?.selected_requirements || [], false);
         useJobPostingStore
           .getState()
-          .setJobDescription(jobPosting?.description || "");
+          .setJobDescription(jobPosting?.description || "", false);
       }
       setIsLoading(false);
     }
-  }, [initialResumeId, setResumeData, setJobId, setResumeTitle, resumeData]);
+  }, [initialResumeId, setResumeData, setJobId, setResumeTitle]);
 
   useEffect(() => {
     if (initialResumeId) {
@@ -108,19 +111,26 @@ export function ResumeContent({
     }
   }, 2000);
 
-  // Trigger auto-save when data changes (only if jobPosting exists)
+  // Trigger auto-save when data changes (only if jobPosting exists and user has made modifications)
   useEffect(() => {
-    if (jobPosting || jobDescription.trim() !== "") {
+    if (isJobPostingDirty && (jobPosting || jobDescription.trim() !== "")) {
       debouncedSaveJobPosting();
     }
-  }, [jobPosting, jobDescription, selectedKeywords, debouncedSaveJobPosting]);
+  }, [
+    jobPosting,
+    resumeTitle,
+    jobDescription,
+    selectedKeywords,
+    isJobPostingDirty,
+    debouncedSaveJobPosting,
+  ]);
 
-  // Trigger auto-save for resume (only if jobId exists)
+  // Trigger auto-save for resume (only if jobId exists and user has made modifications)
   useEffect(() => {
-    if (jobId) {
+    if (isResumeDirty && jobId) {
       debouncedSaveResume();
     }
-  }, [resumeData, resumeTitle, jobId, debouncedSaveResume]);
+  }, [resumeData, resumeTitle, jobId, isResumeDirty, debouncedSaveResume]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -135,13 +145,22 @@ export function ResumeContent({
   const steps = [
     {
       label: "Job Description Analysis",
-      backButtonLabel: "Cancel",
-      nextButtonLabel: "Next",
+      backButton: {
+        label: "Cancel",
+      },
+      nextButton: {
+        label: "Next",
+        isDisabled: jobDescription.trim() === "" || resumeTitle.trim() === "",
+      },
     },
     {
       label: "Content Builder",
-      backButtonLabel: "Back",
-      nextButtonLabel: "Export",
+      backButton: {
+        label: "Back",
+      },
+      nextButton: {
+        label: "Export",
+      },
     },
   ];
 

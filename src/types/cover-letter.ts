@@ -5,6 +5,13 @@
 
 export interface CoverLetterContent {
   paragraphs: string[];
+  closing_signature: string;
+  company: string;
+  descriptive_prompt: string;
+  position: string;
+  recipient: string;
+  resume_id: number | null;
+  tone: "Professional" | "Friendly" | "Enthusiastic" | "Formal";
 }
 
 export interface CoverLetter {

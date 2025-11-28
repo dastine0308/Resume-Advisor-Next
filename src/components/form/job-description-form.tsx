@@ -144,7 +144,6 @@ export default function JobAnalysisForm() {
             <div className="space-y-2">
               <h2 className="text-lg font-bold text-gray-900 md:text-xl">
                 Keywords to Select
-                <span className="ml-2 text-red-500">*</span>
               </h2>
               <p className="text-sm text-gray-600">
                 Review the extracted keywords and check the ones you possess
@@ -166,7 +165,7 @@ export default function JobAnalysisForm() {
                       jobPosting?.requirements?.length > 0 &&
                       jobPosting?.requirements.map((keyword, idx) => (
                         <KeywordChip
-                          key={idx}
+                          key={`${keyword}-${idx}`}
                           label={keyword}
                           selected={selectedKeywords.includes(keyword)}
                           onClick={() => {
