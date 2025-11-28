@@ -47,12 +47,19 @@ apiClient.interceptors.response.use(
     // Handle different error scenarios
     if (error.response) {
       // Handle 401 Unauthorized - token expired or invalid
+      // Skip redirect if we're already on the login page (e.g., invalid credentials)
       if (error.response.status === 401) {
-        console.warn("Token expired or invalid, logging out...");
-        useAuthStore.getState().logout();
-        // Redirect to login page
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
+        const isLoginPage =
+          typeof window !== "undefined" &&
+          window.location.pathname === "/login";
+
+        if (!isLoginPage) {
+          console.warn("Token expired or invalid, logging out...");
+          useAuthStore.getState().logout();
+          // Redirect to login page
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
         }
       }
 

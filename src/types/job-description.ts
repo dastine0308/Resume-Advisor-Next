@@ -21,7 +21,7 @@ export interface JobDescriptionAnalysisResponse {
 export interface JobDescriptionSaveResponse {
   success: boolean;
   data?: {
-    jobId: string;
+    jobId: number;
     keywords: {
       id: string;
       label: string;

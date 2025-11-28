@@ -4,11 +4,16 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Dropdown, Tabs } from "@/components/ui";
 import { useAccountStore } from "@/stores";
-import { getUserResumes, getUserCoverLetters, deleteResume, deleteCoverLetter } from "@/lib/api-services";
+import {
+  getUserResumes,
+  getUserCoverLetters,
+  deleteResume,
+  deleteCoverLetter,
+} from "@/lib/api-services";
 import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
 
 interface Document {
-  id: string;
+  id: number;
   jobId?: number;
   type: "resume" | "coverLetter";
   title: string;
@@ -49,22 +54,25 @@ export default function DashboardPage() {
               jobId: resume.job_id,
               type: "resume" as const,
               title: resume.title || "Untitled Resume",
-              modifiedDate: formatRelativeDate(resume.last_updated),
+              modifiedDate: resume.last_updated,
             }))
           : [];
 
         const coverLetterDocs: Document[] = coverLettersResponse?.length
           ? coverLettersResponse.map((coverLetter) => ({
-              id: coverLetter.id.toString(),
+              id: coverLetter.id,
               type: "coverLetter" as const,
               title: coverLetter.title || "Untitled Cover Letter",
-              modifiedDate: formatRelativeDate(coverLetter.last_updated),
+              modifiedDate: coverLetter.last_updated,
             }))
           : [];
 
-        // Combine and sort by date
+        // Combine and sort by date (newest first)
         const allDocs = [...resumeDocs, ...coverLetterDocs].sort((a, b) => {
-          return new Date(b.modifiedDate).getTime() - new Date(a.modifiedDate).getTime();
+          return (
+            new Date(b.modifiedDate).getTime() -
+            new Date(a.modifiedDate).getTime()
+          );
         });
 
         setDocuments(allDocs);
@@ -192,7 +200,10 @@ export default function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {filteredDocuments.map((doc) => (
-                      <tr key={`${doc.type}-${doc.id}`} className="hover:bg-gray-50">
+                      <tr
+                        key={`${doc.type}-${doc.id}`}
+                        className="hover:bg-gray-50"
+                      >
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="flex items-center gap-3">
                             <FileTextIcon className="h-5 w-5 text-gray-400" />
@@ -205,7 +216,7 @@ export default function DashboardPage() {
                           {doc.type === "resume" ? "Resume" : "Cover Letter"}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {doc.modifiedDate}
+                          {formatRelativeDate(doc.modifiedDate)}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -250,7 +261,7 @@ export default function DashboardPage() {
                           </p>
                           <p className="text-xs text-gray-500">
                             {doc.type === "resume" ? "Resume" : "Cover Letter"}{" "}
-                            · {doc.modifiedDate}
+                            · {formatRelativeDate(doc.modifiedDate)}
                           </p>
                         </div>
                       </div>

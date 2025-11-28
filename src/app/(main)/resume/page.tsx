@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ResumeContent } from "@/components/resume-content";
 
 interface ResumePageProps {
-  searchParams: Promise<{ resumeId?: string }>;
+  searchParams: Promise<{ resumeId?: number | null }>;
 }
 
 export default async function ResumePage({ searchParams }: ResumePageProps) {

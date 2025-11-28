@@ -4,7 +4,7 @@ export interface HashedPassword {
 }
 
 export type User = {
-  id: string;
+  id: number;
   email: string;
   phone: string;
   first_name: string;

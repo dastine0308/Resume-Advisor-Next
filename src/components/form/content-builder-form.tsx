@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { v4 as uuidv4 } from "uuid";
 import {
   DndContext,
   closestCenter,
@@ -119,81 +120,78 @@ export default function ContentBuilderForm() {
     }));
   };
 
-  const addEducation = () => {
-    const newEducation: Education = {
-      id: Date.now().toString(),
-      universityName: "",
-      degree: "",
-      location: "",
-      datesAttended: "",
-      coursework: "",
-      order: 0,
-      isCollapsed: false,
-    };
+  const addEducation = useCallback(() => {
     setResumeData((prev) => ({
       ...prev,
       education: [
         ...prev.education,
-        { ...newEducation, order: prev.education.length },
+        {
+          id: uuidv4(),
+          universityName: "",
+          degree: "",
+          location: "",
+          datesAttended: "",
+          coursework: "",
+          order: prev.education.length,
+          isCollapsed: false,
+        },
       ],
     }));
-  };
+  }, [setResumeData]);
 
-  const addExperience = () => {
-    const newExperience: Experience = {
-      id: Date.now().toString(),
-      jobTitle: "",
-      company: "",
-      location: "",
-      dates: "",
-      description: "",
-      order: 0,
-      isCollapsed: false,
-    };
+  const addExperience = useCallback(() => {
     setResumeData((prev) => ({
       ...prev,
       experience: [
         ...prev.experience,
-        { ...newExperience, order: prev.experience.length },
+        {
+          id: uuidv4(),
+          jobTitle: "",
+          company: "",
+          location: "",
+          dates: "",
+          description: "",
+          order: prev.experience.length,
+          isCollapsed: false,
+        },
       ],
     }));
-  };
+  }, [setResumeData]);
 
-  const addProject = () => {
-    const newProject: Project = {
-      id: Date.now().toString(),
-      projectName: "",
-      technologies: "",
-      date: "",
-      description: "",
-      order: 0,
-      isCollapsed: false,
-    };
+  const addProject = useCallback(() => {
     setResumeData((prev) => ({
       ...prev,
       projects: [
         ...prev.projects,
-        { ...newProject, order: prev.projects.length },
+        {
+          id: uuidv4(),
+          projectName: "",
+          technologies: "",
+          date: "",
+          description: "",
+          order: prev.projects.length,
+          isCollapsed: false,
+        },
       ],
     }));
-  };
+  }, [setResumeData]);
 
   const addLeadership = useCallback(() => {
-    setResumeData((prev) => {
-      const newLeadership: Leadership = {
-        id: `leadership-${Date.now()}-${prev.leadership.length}`,
-        role: "",
-        organization: "",
-        dates: "",
-        description: "",
-        order: prev.leadership.length,
-        isCollapsed: false,
-      };
-      return {
-        ...prev,
-        leadership: [...prev.leadership, newLeadership],
-      };
-    });
+    setResumeData((prev) => ({
+      ...prev,
+      leadership: [
+        ...prev.leadership,
+        {
+          id: uuidv4(),
+          role: "",
+          organization: "",
+          dates: "",
+          description: "",
+          order: prev.leadership.length,
+          isCollapsed: false,
+        },
+      ],
+    }));
   }, [setResumeData]);
 
   const toggleEducationCollapse = useCallback(
@@ -571,11 +569,9 @@ export default function ContentBuilderForm() {
                         items={resumeData.education.map((e) => e.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.education.length > 0 &&
-                          resumeData.education.some((e) => e.id) &&
-                          resumeData.education.map((edu, idx) => (
+                        {resumeData.education.map((edu, idx) => (
                             <DraggableSection
-                              key={edu.id || `edu-${idx}`}
+                              key={edu.id}
                               item={edu}
                               index={idx}
                               totalCount={resumeData.education.length}
@@ -704,11 +700,9 @@ export default function ContentBuilderForm() {
                         items={resumeData.experience.map((e) => e.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.experience.length > 0 &&
-                          resumeData.experience.some((e) => e.id) &&
-                          resumeData.experience.map((exp, idx) => (
+                        {resumeData.experience.map((exp, idx) => (
                             <DraggableSection
-                              key={exp.id || `exp-${idx}`}
+                              key={exp.id}
                               item={exp}
                               index={idx}
                               totalCount={resumeData.experience.length}
@@ -860,11 +854,9 @@ export default function ContentBuilderForm() {
                         items={resumeData.projects.map((p) => p.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.projects.length > 0 &&
-                          resumeData.projects.some((p) => p.id) &&
-                          resumeData.projects.map((proj, idx) => (
+                        {resumeData.projects.map((proj, idx) => (
                             <DraggableSection
-                              key={proj.id || `proj-${idx}`}
+                              key={proj.id}
                               item={proj}
                               index={idx}
                               totalCount={resumeData.projects.length}
@@ -1057,11 +1049,9 @@ export default function ContentBuilderForm() {
                         items={resumeData.leadership.map((l) => l.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {resumeData.leadership.length > 0 &&
-                          resumeData.leadership.some((l) => l.id) &&
-                          resumeData.leadership.map((lead, idx) => (
+                        {resumeData.leadership.map((lead, idx) => (
                             <DraggableSection
-                              key={lead.id || `lead-${idx}`}
+                              key={lead.id}
                               item={lead}
                               index={idx}
                               totalCount={resumeData.leadership.length}

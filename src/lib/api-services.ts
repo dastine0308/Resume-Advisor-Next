@@ -119,7 +119,7 @@ export interface ResumeSection {
 }
 
 export interface ResumesResponse {
-  id: string;
+  id: number;
   job_id: number;
   last_updated: string;
   title: string;
@@ -133,14 +133,14 @@ export async function getUserResumes(): Promise<ResumesResponse[]> {
 }
 
 export interface ResumeCreateUpdateRequest {
-  id?: string;
+  id?: number;
   job_id: number;
   sections: ResumeDataSection;
   title: string;
 }
 
 export interface ResumeCreateUpdateResponse {
-  resume_id: string;
+  resume_id: number;
   success: boolean;
 }
 
@@ -174,14 +174,14 @@ export async function createOrUpdateResume(
 /**
  * Get a specific resume by ID
  */
-export async function getResumeById(id: string): Promise<ResumeDataResponse> {
+export async function getResumeById(id: number): Promise<ResumeDataResponse> {
   return api.get<ResumeDataResponse>(`/resumes/${id}`);
 }
 
 /**
  * Delete a specific resume by ID
  */
-export async function deleteResume(id: string): Promise<{ success: boolean }> {
+export async function deleteResume(id: number): Promise<{ success: boolean }> {
   return api.delete<{ success: boolean }>(`/resumes/${id}`);
 }
 
@@ -207,7 +207,7 @@ export async function createOrUpdateJobPosting(
 /**
  * Get details of a job posting by ID
  */
-export async function getJobPosting(id: string): Promise<JobPosting> {
+export async function getJobPosting(id: number): Promise<JobPosting> {
   return api.get<JobPosting>(`/job-postings/${id}`);
 }
 
@@ -232,7 +232,7 @@ export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
 /**
  * Get a specific cover letter by ID
  */
-export async function getCoverLetterById(id: string): Promise<CoverLetter> {
+export async function getCoverLetterById(id: number): Promise<CoverLetter> {
   return api.get<CoverLetter>(`/cover-letters/${id}`);
 }
 
@@ -249,7 +249,7 @@ export async function createOrUpdateCoverLetter(
  * Delete a specific cover letter by ID
  */
 export async function deleteCoverLetter(
-  id: string,
+  id: number,
 ): Promise<{ success: boolean; message: string }> {
   return api.delete<{ success: boolean; message: string }>(
     `/cover-letters/${id}`,

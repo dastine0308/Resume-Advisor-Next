@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { v4 as uuidv4 } from "uuid";
 import type { ResumeData } from "@/types/resume";
 import {
   createOrUpdateResume,
@@ -8,8 +10,8 @@ import {
 import { useAccountStore } from "@/stores/useAccountStore";
 
 interface ResumeStore {
-  resumeId: string;
-  setResumeId: (id: string) => void;
+  resumeId: number | null;
+  setResumeId: (id: number | null) => void;
 
   resumeTitle: string;
   setResumeTitle: (title: string, markDirty?: boolean) => void;
@@ -18,7 +20,10 @@ interface ResumeStore {
   setJobId: (id: number | null) => void;
 
   resumeData: ResumeData;
-  setResumeData: (d: ResumeData | ((prev: ResumeData) => ResumeData), markDirty?: boolean) => void;
+  setResumeData: (
+    d: ResumeData | ((prev: ResumeData) => ResumeData),
+    markDirty?: boolean,
+  ) => void;
 
   // Track if user has made modifications (for auto-save)
   isDirty: boolean;
@@ -46,6 +51,7 @@ interface ResumeStore {
 
   // Save resume to API
   isSaving: boolean;
+  isCreating: boolean; // Lock to prevent multiple create requests
   saveError: string | null;
   saveResume: () => Promise<ResumeCreateUpdateResponse | null>;
 
@@ -53,12 +59,15 @@ interface ResumeStore {
   resetStore: () => void;
 }
 
-export const useResumeStore = create<ResumeStore>((set, get) => ({
-  resumeId: "",
+export const useResumeStore = create<ResumeStore>()(
+  persist(
+    (set, get) => ({
+  resumeId: null,
   setResumeId: (id) => set({ resumeId: id }),
 
   resumeTitle: "",
-  setResumeTitle: (title, markDirty = true) => set({ resumeTitle: title, ...(markDirty && { isDirty: true }) }),
+  setResumeTitle: (title, markDirty = true) =>
+    set({ resumeTitle: title, ...(markDirty && { isDirty: true }) }),
 
   jobId: null,
   setJobId: (id) => set({ jobId: id }),
@@ -79,7 +88,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
     },
     education: [
       {
-        id: "",
+        id: uuidv4(),
         universityName: "",
         degree: "",
         location: "",
@@ -91,7 +100,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
     ],
     experience: [
       {
-        id: "",
+        id: uuidv4(),
         jobTitle: "",
         company: "",
         location: "",
@@ -103,7 +112,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
     ],
     projects: [
       {
-        id: "",
+        id: uuidv4(),
         projectName: "",
         technologies: "",
         date: "",
@@ -114,7 +123,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
     ],
     leadership: [
       {
-        id: "",
+        id: uuidv4(),
         role: "",
         organization: "",
         dates: "",
@@ -158,17 +167,56 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   setIsPdfGenerating: (v) => set({ isPdfGenerating: v }),
 
   isSaving: false,
+  isCreating: false,
   saveError: null,
   saveResume: async () => {
-    const { resumeId, resumeData, resumeTitle, jobId } = get();
+    const state = get();
+    const {
+      resumeId,
+      resumeData,
+      resumeTitle,
+      jobId,
+      isSaving,
+      isDirty,
+      isCreating,
+    } = state;
+
+    // Prevent duplicate saves
+    if (isSaving) {
+      return null;
+    }
+
+    // Don't save if there are no changes
+    if (!isDirty) {
+      return null;
+    }
+
+    // If no resumeId exists and we're already creating one, wait for it to complete
+    // This prevents multiple POST requests creating duplicate resumes
+    // Use explicit null check since resumeId could be 0 (which is falsy but valid)
+    if (resumeId === null && isCreating) {
+      return null;
+    }
 
     if (jobId === null) {
       set({ saveError: "Job ID is required to save resume" });
       return null;
     }
 
+    // Determine if this is a create or update operation
+    // Use explicit null check since resumeId could be 0 (which is falsy but valid)
+    const isCreateOperation = resumeId === null;
+
+    // Set flags before making the request
+    set({
+      isSaving: true,
+      saveError: null,
+      isDirty: false,
+      ...(isCreateOperation && { isCreating: true }),
+    });
+
     const request: ResumeCreateUpdateRequest = {
-      id: resumeId || undefined,
+      id: resumeId ?? undefined,
       job_id: jobId,
       sections: {
         education: resumeData.education,
@@ -180,25 +228,36 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
       title: resumeTitle || "Untitled Resume",
     };
 
-    set({ isSaving: true, saveError: null });
-
     try {
       const response = await createOrUpdateResume(request);
-      if (response.success && response.resume_id) {
-        set({ resumeId: response.resume_id, isSaving: false });
+      console.log("!!!!!!!!Saved resume:", response);
+      if (response.success && response.resume_id >= 0) {
+        set({
+          resumeId: response.resume_id,
+          isSaving: false,
+          isCreating: false,
+        });
+      } else {
+        set({ isSaving: false, isCreating: false });
       }
       return response;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to save resume";
-      set({ saveError: errorMessage, isSaving: false });
+      // On error, mark as dirty again so user can retry
+      set({
+        saveError: errorMessage,
+        isSaving: false,
+        isCreating: false,
+        isDirty: true,
+      });
       return null;
     }
   },
 
   resetStore: () =>
     set({
-      resumeId: "",
+      resumeId: null,
       resumeTitle: "",
       jobId: null,
       isDirty: false,
@@ -209,7 +268,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
         },
         education: [
           {
-            id: "",
+            id: uuidv4(),
             universityName: "",
             degree: "",
             location: "",
@@ -221,7 +280,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
         ],
         experience: [
           {
-            id: "",
+            id: uuidv4(),
             jobTitle: "",
             company: "",
             location: "",
@@ -233,7 +292,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
         ],
         projects: [
           {
-            id: "",
+            id: uuidv4(),
             projectName: "",
             technologies: "",
             date: "",
@@ -244,7 +303,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
         ],
         leadership: [
           {
-            id: "",
+            id: uuidv4(),
             role: "",
             organization: "",
             dates: "",
@@ -267,9 +326,22 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
       compileError: null,
       isPdfGenerating: false,
       isSaving: false,
+      isCreating: false,
       saveError: null,
     }),
-}));
+    }),
+    {
+      name: "resume-storage",
+      partialize: (state) => ({
+        resumeId: state.resumeId,
+        resumeTitle: state.resumeTitle,
+        jobId: state.jobId,
+        resumeData: state.resumeData,
+        currentStep: state.currentStep,
+      }),
+    },
+  ),
+);
 
 export default useResumeStore;
 

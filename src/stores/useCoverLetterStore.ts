@@ -13,8 +13,8 @@ interface CoverLetterStore {
   title: string;
   setTitle: (title: string) => void;
 
-  resumeId: string;
-  setResumeId: (id: string) => void;
+  resumeId: number | null;
+  setResumeId: (id: number | null) => void;
 
   jobId: number | null;
   setJobId: (id: number | null) => void;
@@ -59,7 +59,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
   title: "",
   setTitle: (title) => set({ title }),
 
-  resumeId: "",
+  resumeId: null,
   setResumeId: (id) => set({ resumeId: id }),
 
   jobId: null,
@@ -105,7 +105,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
     const request: CreateUpdateCoverLetterRequest = {
       id: coverLetterId || undefined,
       job_id: jobId,
-      title: title,
+      title: `${content?.company || "Cover Letter"} - ${content?.position || "Position"}`,
       content: content,
     };
 
@@ -129,7 +129,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
     set({
       coverLetterId: null,
       title: "",
-      resumeId: "",
+      resumeId: null,
       jobId: null,
       content: initialContent,
       generatedContent: "",

@@ -19,14 +19,19 @@ import { ChevronDownIcon } from "@radix-ui/react-icons";
 function CoverLetterPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialCoverLetterId = searchParams.get("id");
+  const initialCoverLetterId = Number(searchParams.get("id")) || null;
 
   const [resumeTitle, setResumeTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [resumeList, setResumeList] = useState<
-    { id: string; jobId: number; title: string; modifiedDate: string }[]
+    {
+      id: number | null;
+      jobId: number;
+      title: string;
+      modifiedDate: string | null;
+    }[]
   >([]);
 
   const {
@@ -67,19 +72,12 @@ function CoverLetterPageContent() {
       try {
         const response = await getUserResumes();
         const list = response?.length
-          ? response.map(
-              (resume: {
-                id: string;
-                job_id: number;
-                last_updated: string;
-                title: string;
-              }) => ({
-                id: resume.id,
-                jobId: resume.job_id,
-                title: resume.title || "Untitled Resume",
-                modifiedDate: resume.last_updated,
-              }),
-            )
+          ? response.map((resume) => ({
+              id: resume.id || null,
+              jobId: resume.job_id,
+              title: resume.title || "Untitled Resume",
+              modifiedDate: resume.last_updated,
+            }))
           : [];
         setResumeList(list);
         return list;
@@ -102,7 +100,7 @@ function CoverLetterPageContent() {
               (r: { jobId: number }) => r.jobId === data.job_id,
             );
             if (matchedResume) {
-              setResumeId(matchedResume.id);
+              setResumeId(Number(matchedResume.id));
               setResumeTitle(matchedResume.title);
             }
             setJobId(data.job_id);
@@ -123,7 +121,7 @@ function CoverLetterPageContent() {
 
   // Handle resume selection
   const handleResumeSelect = async (resume: {
-    id: string;
+    id: number;
     jobId: number;
     title: string;
   }) => {
@@ -160,7 +158,7 @@ function CoverLetterPageContent() {
       if (resumeData.job_id) {
         try {
           const { getJobPosting } = await import("@/lib/api-services");
-          const jobPosting = await getJobPosting(resumeData.job_id.toString());
+          const jobPosting = await getJobPosting(resumeData.job_id);
 
           keywords = jobPosting?.selected_requirements || [];
           jobDescription = jobPosting?.description || "";
@@ -410,11 +408,18 @@ function CoverLetterPageContent() {
                               <ChevronDownIcon className="ml-2 h-4 w-4" />
                             </Button>
                           }
-                          items={resumeList.map((r) => ({
-                            label: r.title,
-                            value: r.title,
-                            onClick: () => handleResumeSelect(r),
-                          }))}
+                          items={resumeList
+                            .filter((r) => r.id !== null)
+                            .map((r) => ({
+                              label: r.title,
+                              value: r.title,
+                              onClick: () =>
+                                handleResumeSelect({
+                                  id: r.id as number,
+                                  jobId: r.jobId,
+                                  title: r.title,
+                                }),
+                            }))}
                           disabled={resumeList.length === 0}
                         />
                       </div>
