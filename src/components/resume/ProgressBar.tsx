@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui";
 import React from "react";
+import { cn } from "@/lib/utils";
 
 interface ProgressBarProps {
   currentStep: number;
@@ -9,6 +10,7 @@ interface ProgressBarProps {
     backButtonLabel?: string;
     nextButtonLabel?: string;
   }[];
+  className?: string;
   onBack?: () => void;
   onNext?: () => void;
 }
@@ -17,13 +19,14 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   currentStep,
   totalSteps,
   steps,
+  className,
   onBack,
   onNext,
 }) => {
   const percentage = (currentStep / totalSteps) * 100;
 
   return (
-    <div className="w-full bg-white px-4 pb-4 pt-4 md:px-5">
+    <div className={cn("w-full bg-white px-4 pb-4 pt-4 md:px-5", className)}>
       <div className="mb-2">
         <p className="text-xs uppercase tracking-wide text-gray-500">
           {steps[currentStep - 1]?.label}

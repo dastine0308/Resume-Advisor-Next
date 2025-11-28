@@ -34,11 +34,12 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except:
+     * - api (API routes - handled by rewrites)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files (public folder)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

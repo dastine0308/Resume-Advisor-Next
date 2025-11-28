@@ -49,7 +49,7 @@ export default function SignUpForm() {
   };
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-md">
+    <div className="rounded-b-xl bg-white p-6 shadow-md">
       {/* Header */}
       <div className="mb-4 text-center">
         <h1 className="text-2xl font-bold text-indigo-600">Sign Up</h1>

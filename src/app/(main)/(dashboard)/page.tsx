@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Dropdown, Tabs } from "@/components/ui";
 import { useAccountStore } from "@/stores";
-import { getUserResumes, deleteResume } from "@/lib/api-services";
+import { getUserResumes, getUserCoverLetters, deleteResume, deleteCoverLetter } from "@/lib/api-services";
 import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
 
 interface Document {
@@ -35,11 +35,16 @@ export default function DashboardPage() {
   const user = useAccountStore((state) => state.user);
 
   useEffect(() => {
-    async function fetchResumes() {
+    async function fetchDocuments() {
       try {
-        const response = await getUserResumes();
-        const resumeDocs: Document[] = response?.length
-          ? response.map((resume) => ({
+        // Fetch both resumes and cover letters
+        const [resumesResponse, coverLettersResponse] = await Promise.all([
+          getUserResumes(),
+          getUserCoverLetters(),
+        ]);
+
+        const resumeDocs: Document[] = resumesResponse?.length
+          ? resumesResponse.map((resume) => ({
               id: resume.id,
               jobId: resume.job_id,
               type: "resume" as const,
@@ -47,30 +52,54 @@ export default function DashboardPage() {
               modifiedDate: formatRelativeDate(resume.last_updated),
             }))
           : [];
-        setDocuments(resumeDocs);
+
+        const coverLetterDocs: Document[] = coverLettersResponse?.length
+          ? coverLettersResponse.map((coverLetter) => ({
+              id: coverLetter.id.toString(),
+              type: "coverLetter" as const,
+              title: coverLetter.title || "Untitled Cover Letter",
+              modifiedDate: formatRelativeDate(coverLetter.last_updated),
+            }))
+          : [];
+
+        // Combine and sort by date
+        const allDocs = [...resumeDocs, ...coverLetterDocs].sort((a, b) => {
+          return new Date(b.modifiedDate).getTime() - new Date(a.modifiedDate).getTime();
+        });
+
+        setDocuments(allDocs);
       } catch (error) {
-        console.error("Failed to fetch resumes:", error);
+        console.error("Failed to fetch documents:", error);
       } finally {
         setIsLoading(false);
       }
     }
 
-    fetchResumes();
+    fetchDocuments();
   }, []);
 
   // Handle document actions
-  const handleEdit = (id: string) => {
-    // Navigate to the first step of the resume workflow using query param
-    router.push(`/resume?resumeId=${encodeURIComponent(id)}`);
+  const handleEdit = (doc: Document) => {
+    if (doc.type === "resume") {
+      // Navigate to the first step of the resume workflow using query param
+      router.push(`/resume?resumeId=${encodeURIComponent(doc.id)}`);
+    } else {
+      // Navigate to cover letter page (you can add cover letter editing later)
+      router.push(`/cover-letter`);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    console.log("Delete document:", id);
+  const handleDelete = async (doc: Document) => {
+    console.log("Delete document:", doc.id, "type:", doc.type);
     try {
-      await deleteResume(id);
-      setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+      if (doc.type === "resume") {
+        await deleteResume(doc.id);
+      } else {
+        await deleteCoverLetter(doc.id);
+      }
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     } catch (error) {
-      console.error("Failed to delete resume:", error);
+      console.error("Failed to delete document:", error);
     }
   };
 
@@ -183,7 +212,7 @@ export default function DashboardPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleEdit(doc.id)}
+                              onClick={() => handleEdit(doc)}
                               aria-label="Edit"
                             >
                               <Pencil1Icon className="h-4 w-4" />
@@ -191,7 +220,7 @@ export default function DashboardPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(doc.id)}
+                              onClick={() => handleDelete(doc)}
                               aria-label="Delete"
                               className="text-red-600 hover:bg-red-50"
                             >
@@ -229,7 +258,7 @@ export default function DashboardPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEdit(doc.id)}
+                          onClick={() => handleEdit(doc)}
                           aria-label="Edit"
                         >
                           <Pencil1Icon className="h-4 w-4" />
@@ -237,7 +266,7 @@ export default function DashboardPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(doc.id)}
+                          onClick={() => handleDelete(doc)}
                           aria-label="Delete"
                           className="text-red-600 hover:bg-red-50"
                         >

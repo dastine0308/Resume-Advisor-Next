@@ -30,7 +30,8 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()((set) => ({
   isAuthenticated: typeof document !== "undefined" && !!getCookie(TOKEN_COOKIE_NAME),
-  setAuth: (token: string, _userId: number) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setAuth: (token: string, userId: number) => {
     setCookie(TOKEN_COOKIE_NAME, token);
     set({ isAuthenticated: true });
   },

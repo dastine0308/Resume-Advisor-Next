@@ -483,7 +483,6 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
 - **Icons**: [@radix-ui/react-icons](https://www.radix-ui.com/icons)
 - **Form Labels**: [@radix-ui/react-label](https://www.radix-ui.com/)
 - **Toast Notifications**: [Sonner](https://sonner.emilkowal.ski/)
-- **Phone Input**: [react-phone-number-input](https://www.npmjs.com/package/react-phone-number-input)
 - **Styling Utilities**: [clsx](https://github.com/lukeed/clsx), [tailwind-merge](https://github.com/dcastil/tailwind-merge)
 - **Variants**: [class-variance-authority](https://cva.style/)
 
