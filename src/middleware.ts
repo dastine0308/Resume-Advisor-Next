@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const TOKEN_COOKIE_NAME = "auth-token";
 
 // Public routes that don't require authentication
-const publicPrefixes = ["/login", "/signup"];
+const publicPrefixes = ["/login", "/signup", "/"];
 
 export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
