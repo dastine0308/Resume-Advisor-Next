@@ -52,7 +52,9 @@ export default function LandingPage() {
                 <div
                   key={banner}
                   className={`transition-opacity duration-700 ${
-                    index === currentBanner ? "opacity-100" : "opacity-0 absolute inset-0"
+                    index === currentBanner
+                      ? "opacity-100"
+                      : "absolute inset-0 opacity-0"
                   }`}
                 >
                   <Image
@@ -60,7 +62,7 @@ export default function LandingPage() {
                     alt={`Resume Advisor Feature ${index + 1}`}
                     width={1920}
                     height={1080}
-                    className="w-full h-auto"
+                    className="h-auto w-full"
                     priority={index === 0}
                     quality={90}
                   />
@@ -282,17 +284,6 @@ export default function LandingPage() {
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="text-lg font-bold text-white">Resume Advisor</div>
             <div className="text-sm">Copyright 2025. All rights reserved.</div>
-            <div className="flex gap-6 text-sm">
-              <a href="#" className="hover:text-white">
-                Privacy Policy
-              </a>
-              <a href="#" className="hover:text-white">
-                Terms of Service
-              </a>
-              <a href="#" className="hover:text-white">
-                Contact Support
-              </a>
-            </div>
           </div>
         </div>
       </footer>

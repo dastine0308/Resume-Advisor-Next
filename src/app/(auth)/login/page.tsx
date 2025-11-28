@@ -42,7 +42,7 @@ export default function LoginPage() {
         // Fetch and store user data
         const userData = await getUserData();
         setUser(userData);
-        router.push("/");
+        router.push("/dashboard");
       } else {
         setError("Invalid email or password");
         setIsLoading(false);

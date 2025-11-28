@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 const TOKEN_COOKIE_NAME = "auth-token";
 
 // Public routes that don't require authentication
-const publicPrefixes = ["/login", "/signup"];
-
-// Routes that are public but show different content based on auth status
-const conditionalRoutes = ["/"];
+const publicPrefixes = ["/login", "/signup", "/"];
 
 export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
@@ -17,10 +14,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith(route),
   );
 
-  // Check if it's a conditional route (landing page)
-  const isConditionalRoute = conditionalRoutes.includes(pathname);
-
-  if (isPublicRoute || isConditionalRoute) {
+  if (isPublicRoute) {
     return NextResponse.next();
   }
 

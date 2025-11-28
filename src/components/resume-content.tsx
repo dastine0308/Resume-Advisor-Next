@@ -32,7 +32,12 @@ export function ResumeContent({
     setResumeTitle,
     isDirty: isResumeDirty,
   } = useResumeStore();
-  const { jobPosting, selectedKeywords, jobDescription, isDirty: isJobPostingDirty } = useJobPostingStore();
+  const {
+    jobPosting,
+    selectedKeywords,
+    jobDescription,
+    isDirty: isJobPostingDirty,
+  } = useJobPostingStore();
 
   const fetchResumeData = useCallback(async () => {
     if (initialResumeId) {
@@ -44,18 +49,21 @@ export function ResumeContent({
         setResumeTitle(response.title, false);
         // Use functional update to access current state without adding resumeData as dependency
         const currentResumeData = useResumeStore.getState().resumeData;
-        setResumeData({
-          personalInfo: currentResumeData?.personalInfo || {},
-          education: response?.sections?.education || [],
-          experience: response?.sections?.work_experience || [],
-          projects: response?.sections?.projects || [],
-          leadership: response?.sections?.leadership || [],
-          technicalSkills: response?.sections?.skills || {
-            languages: "",
-            developerTools: "",
-            technologiesFrameworks: "",
+        setResumeData(
+          {
+            personalInfo: currentResumeData?.personalInfo || {},
+            education: response?.sections?.education || [],
+            experience: response?.sections?.work_experience || [],
+            projects: response?.sections?.projects || [],
+            leadership: response?.sections?.leadership || [],
+            technicalSkills: response?.sections?.skills || {
+              languages: "",
+              developerTools: "",
+              technologiesFrameworks: "",
+            },
           },
-        }, false);
+          false,
+        );
 
         const jobPosting = await getJobPosting(response.job_id.toString());
         useJobPostingStore.getState().setJobPosting(jobPosting, false);
@@ -166,7 +174,7 @@ export function ResumeContent({
 
   const handleBack = () => {
     if (currentStep === 1) {
-      router.push("/");
+      router.push("/dashboard");
       return;
     }
     setCurrentStep(currentStep - 1);

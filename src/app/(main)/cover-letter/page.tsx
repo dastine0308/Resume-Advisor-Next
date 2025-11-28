@@ -343,42 +343,36 @@ function CoverLetterPageContent() {
                 <section className="rounded-lg bg-white p-5 shadow-sm md:p-6">
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label>Recipient</Label>
-                        <Input
-                          value={content.recipient}
-                          onChange={(e) =>
-                            updateContentField("recipient", e.target.value)
-                          }
-                          placeholder="Hiring Manager"
-                          aria-label="Recipient"
-                        />
-                      </div>
-                      <div>
-                        <Label>Company</Label>
-                        <Input
-                          value={content.company}
-                          onChange={(e) =>
-                            updateContentField("company", e.target.value)
-                          }
-                          placeholder="Company, Inc."
-                          aria-label="Company"
-                        />
-                      </div>
+                      <Input
+                        value={content.recipient}
+                        label="Recipient"
+                        onChange={(e) =>
+                          updateContentField("recipient", e.target.value)
+                        }
+                        placeholder="Hiring Manager"
+                        aria-label="Recipient"
+                      />
+                      <Input
+                        value={content.company}
+                        label="Company"
+                        onChange={(e) =>
+                          updateContentField("company", e.target.value)
+                        }
+                        placeholder="Company, Inc."
+                        aria-label="Company"
+                      />
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-1">
-                      <div>
-                        <Label>Position</Label>
-                        <Input
-                          value={content.position}
-                          onChange={(e) =>
-                            updateContentField("position", e.target.value)
-                          }
-                          placeholder="Product Manager"
-                          aria-label="Position"
-                        />
-                      </div>
+                      <Input
+                        label="Position"
+                        value={content.position}
+                        onChange={(e) =>
+                          updateContentField("position", e.target.value)
+                        }
+                        placeholder="Product Manager"
+                        aria-label="Position"
+                      />
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -388,7 +382,7 @@ function CoverLetterPageContent() {
                           trigger={
                             <Button
                               variant="outline"
-                              className="w-full justify-between border-gray-300 font-normal text-gray-700"
+                              className="mt-2 w-full justify-between border-gray-300 font-normal text-gray-700"
                             >
                               {content.tone || "Select"}
                               <ChevronDownIcon className="ml-2 h-4 w-4" />
@@ -409,7 +403,7 @@ function CoverLetterPageContent() {
                           trigger={
                             <Button
                               variant="outline"
-                              className="w-full justify-between border-gray-300 font-normal text-gray-700"
+                              className="mt-2 w-full justify-between border-gray-300 font-normal text-gray-700"
                               disabled={resumeList.length === 0}
                             >
                               {resumeTitle || "Select a Resume"}
@@ -426,39 +420,27 @@ function CoverLetterPageContent() {
                       </div>
                     </div>
 
-                    <div>
-                      <Label>
-                        Descriptive Prompt{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      <Textarea
-                        value={content?.descriptive_prompt || ""}
-                        onChange={(e) =>
-                          updateContentField(
-                            "descriptive_prompt",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Example: I want to emphasize my leadership experience and technical skills in cloud architecture. The tone should be enthusiastic and highlight my passion for innovation."
-                        aria-label="Prompt"
-                        className="min-h-[140px]"
-                      />
-                    </div>
+                    <Textarea
+                      value={content?.descriptive_prompt || ""}
+                      label="Descriptive Prompt"
+                      required
+                      onChange={(e) =>
+                        updateContentField("descriptive_prompt", e.target.value)
+                      }
+                      placeholder="Example: I want to emphasize my leadership experience and technical skills in cloud architecture. The tone should be enthusiastic and highlight my passion for innovation."
+                      aria-label="Prompt"
+                      className="min-h-[140px]"
+                    />
 
-                    <div>
-                      <Label>Closing / Signature</Label>
-                      <Input
-                        value={content.closing_signature}
-                        onChange={(e) =>
-                          updateContentField(
-                            "closing_signature",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Your name"
-                        aria-label="Closing"
-                      />
-                    </div>
+                    <Input
+                      label="Closing / Signature"
+                      value={content.closing_signature}
+                      onChange={(e) =>
+                        updateContentField("closing_signature", e.target.value)
+                      }
+                      placeholder="Your name"
+                      aria-label="Closing"
+                    />
 
                     <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
                       <Button
@@ -468,7 +450,7 @@ function CoverLetterPageContent() {
                           setGeneratedContent("");
                           setIsEditing(false);
                           useCoverLetterStore.getState().resetStore();
-                          router.push("/");
+                          router.push("/dashboard");
                         }}
                         className="w-full sm:w-auto"
                       >

@@ -42,7 +42,7 @@ export default function AccountSettingPage() {
       location: userData.location || "",
     });
 
-    router.push("/");
+    router.push("/dashboard");
   };
 
   const updateUser = async (userData: typeof formData) => {
@@ -87,7 +87,7 @@ export default function AccountSettingPage() {
         github: formData.github,
         location: formData.location,
       });
-      router.push("/");
+      router.push("/dashboard");
     } catch (error) {
       console.error("Error updating profile:", error);
       toast.error("Failed to update profile");

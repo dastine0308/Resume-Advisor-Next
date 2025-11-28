@@ -79,7 +79,7 @@ export default function ProfileSetUpForm() {
         // Fetch and store user data
         const userData = await getUserData();
         setUser(userData);
-        router.push("/");
+        router.push("/dashboard");
       } else {
         console.error("Error signing in after signup");
       }
