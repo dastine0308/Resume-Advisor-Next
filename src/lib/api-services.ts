@@ -124,7 +124,6 @@ export interface ResumesResponse {
   last_updated: string;
   title: string;
 }
-[];
 
 /**
  * Get all resumes for the current user

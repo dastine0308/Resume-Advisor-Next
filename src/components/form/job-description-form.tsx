@@ -48,7 +48,7 @@ export default function JobAnalysisForm() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [jobDescription]);
+  }, [jobDescription, setJobPosting]);
 
   const isFormValid = jobDescription.trim() !== "";
   const hasKeywords =

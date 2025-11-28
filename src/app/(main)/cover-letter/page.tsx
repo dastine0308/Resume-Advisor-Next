@@ -29,7 +29,6 @@ export default function CoverLetterPage() {
 
   const {
     resumeId,
-    jobId,
     setResumeId,
     setJobId,
     setTitle,
@@ -118,7 +117,7 @@ export default function CoverLetterPage() {
           jobDescription = jobPosting?.description || "";
           jobCompany = jobPosting?.company_name || "";
           jobPosition = jobPosting?.title || "";
-        } catch (error) {
+        } catch {
           // Job posting not found or failed to fetch
         }
       }
@@ -167,7 +166,7 @@ export default function CoverLetterPage() {
                   fullText += parsed.text;
                   setGeneratedContent(fullText);
                 }
-              } catch (e) {
+              } catch {
                 // Failed to parse chunk
               }
             }

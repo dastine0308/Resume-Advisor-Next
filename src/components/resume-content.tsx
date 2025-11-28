@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, use } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { ProgressBar } from "@/components/resume/ProgressBar";
@@ -19,7 +19,7 @@ export function ResumeContent({
   resumeId: initialResumeId,
 }: ResumeContentProps) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(!!initialResumeId);
+  const [, setIsLoading] = useState(!!initialResumeId);
   const {
     resumeTitle,
     jobId,
@@ -30,7 +30,6 @@ export function ResumeContent({
     setCurrentStep,
     setJobId,
     setResumeTitle,
-    resetStore,
   } = useResumeStore();
   const { jobPosting, selectedKeywords, jobDescription } = useJobPostingStore();
 
@@ -74,7 +73,7 @@ export function ResumeContent({
       setResumeId(initialResumeId);
       fetchResumeData();
     }
-  }, [initialResumeId]);
+  }, [initialResumeId, setResumeId, fetchResumeData]);
 
   // Debounced auto-save: saves 2 seconds after user stops editing
   const debouncedSaveJobPosting = useDebouncedCallback(async () => {

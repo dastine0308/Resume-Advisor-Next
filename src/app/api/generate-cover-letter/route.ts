@@ -1,6 +1,43 @@
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
-import { getResumeById, getJobPosting } from "@/lib/api-services";
+
+interface ResumeData {
+  sections?: {
+    work_experience?: Array<{
+      jobTitle?: string;
+      job_title?: string;
+      company: string;
+      dates: string;
+      description?: string;
+    }>;
+    projects?: Array<{
+      projectName?: string;
+      project_name?: string;
+      technologies: string;
+      description?: string;
+    }>;
+    leadership?: Array<{
+      role: string;
+      organization: string;
+      dates: string;
+      description?: string;
+    }>;
+    education?: Array<{
+      degree: string;
+      universityName?: string;
+      university_name?: string;
+      datesAttended?: string;
+      dates_attended?: string;
+    }>;
+    skills?: {
+      languages?: string;
+      developerTools?: string;
+      developer_tools?: string;
+      technologiesFrameworks?: string;
+      technologies_frameworks?: string;
+    };
+  };
+}
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +55,7 @@ export async function POST(req: Request) {
       userPrompt,
       closing,
     } = body as {
-      resumeData: any;
+      resumeData: ResumeData;
       keywords?: string[];
       jobDescription?: string;
       jobCompany?: string;
@@ -166,15 +203,15 @@ ${keywords.length > 0 ? `Target Keywords (incorporate naturally if relevant):\n$
 Write a compelling cover letter that addresses the user's instructions while showcasing relevant qualifications from their resume${jobDescription ? " and aligning with the job description requirements" : ""}.`;
 }
 
-function buildResumeContext(resumeData: any): string {
+function buildResumeContext(resumeData: ResumeData): string {
   const sections: string[] = [];
 
   // Personal Info
   if (resumeData.sections) {
     // Work Experience
-    if (resumeData.sections.work_experience?.length > 0) {
+    if (resumeData.sections.work_experience && resumeData.sections.work_experience.length > 0) {
       sections.push("Work Experience:");
-      resumeData.sections.work_experience.forEach((exp: any) => {
+      resumeData.sections.work_experience.forEach((exp) => {
         sections.push(`- ${exp.jobTitle || exp.job_title} at ${exp.company} (${exp.dates})`);
         if (exp.description) {
           sections.push(`  ${exp.description.substring(0, 200)}...`);
@@ -183,9 +220,9 @@ function buildResumeContext(resumeData: any): string {
     }
 
     // Projects
-    if (resumeData.sections.projects?.length > 0) {
+    if (resumeData.sections.projects && resumeData.sections.projects.length > 0) {
       sections.push("\nProjects:");
-      resumeData.sections.projects.forEach((proj: any) => {
+      resumeData.sections.projects.forEach((proj) => {
         sections.push(`- ${proj.projectName || proj.project_name}: ${proj.technologies}`);
         if (proj.description) {
           sections.push(`  ${proj.description.substring(0, 150)}...`);
@@ -194,9 +231,9 @@ function buildResumeContext(resumeData: any): string {
     }
 
     // Leadership
-    if (resumeData.sections.leadership?.length > 0) {
+    if (resumeData.sections.leadership && resumeData.sections.leadership.length > 0) {
       sections.push("\nLeadership:");
-      resumeData.sections.leadership.forEach((lead: any) => {
+      resumeData.sections.leadership.forEach((lead) => {
         sections.push(`- ${lead.role} at ${lead.organization} (${lead.dates})`);
         if (lead.description) {
           sections.push(`  ${lead.description.substring(0, 150)}...`);
@@ -205,9 +242,9 @@ function buildResumeContext(resumeData: any): string {
     }
 
     // Education
-    if (resumeData.sections.education?.length > 0) {
+    if (resumeData.sections.education && resumeData.sections.education.length > 0) {
       sections.push("\nEducation:");
-      resumeData.sections.education.forEach((edu: any) => {
+      resumeData.sections.education.forEach((edu) => {
         sections.push(`- ${edu.degree} from ${edu.universityName || edu.university_name} (${edu.datesAttended || edu.dates_attended})`);
       });
     }
@@ -217,9 +254,11 @@ function buildResumeContext(resumeData: any): string {
       const skills = resumeData.sections.skills;
       const skillsList: string[] = [];
       if (skills.languages) skillsList.push(skills.languages);
-      if (skills.developerTools || skills.developer_tools) skillsList.push(skills.developerTools || skills.developer_tools);
-      if (skills.technologiesFrameworks || skills.technologies_frameworks) skillsList.push(skills.technologiesFrameworks || skills.technologies_frameworks);
-      
+      const devTools = skills.developerTools || skills.developer_tools;
+      if (devTools) skillsList.push(devTools);
+      const techFrameworks = skills.technologiesFrameworks || skills.technologies_frameworks;
+      if (techFrameworks) skillsList.push(techFrameworks);
+
       if (skillsList.length > 0) {
         sections.push("\nTechnical Skills:");
         sections.push(skillsList.join(", "));

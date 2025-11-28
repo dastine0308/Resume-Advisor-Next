@@ -31,7 +31,6 @@ function DraggableSectionInner<T extends { id: string }>(
 ) {
   const {
     item,
-    index,
     totalCount,
     title,
     onUpdate,

@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useRef,
   useState,
-  useMemo,
 } from "react";
 import {
   DndContext,
@@ -260,7 +259,7 @@ export default function ContentBuilderForm() {
         education: removeAndNormalize(prev.education, id),
       }));
     },
-    [removeAndNormalize],
+    [removeAndNormalize, setResumeData],
   );
 
   const deleteExperience = useCallback(
@@ -270,7 +269,7 @@ export default function ContentBuilderForm() {
         experience: removeAndNormalize(prev.experience, id),
       }));
     },
-    [removeAndNormalize],
+    [removeAndNormalize, setResumeData],
   );
 
   const deleteProject = useCallback(
@@ -280,7 +279,7 @@ export default function ContentBuilderForm() {
         projects: removeAndNormalize(prev.projects, id),
       }));
     },
-    [removeAndNormalize],
+    [removeAndNormalize, setResumeData],
   );
 
   const deleteLeadership = useCallback(
@@ -290,7 +289,7 @@ export default function ContentBuilderForm() {
         leadership: removeAndNormalize(prev.leadership, id),
       }));
     },
-    [removeAndNormalize],
+    [removeAndNormalize, setResumeData],
   );
 
   const showServiceUnavailableToast = useCallback(() => {
@@ -491,7 +490,7 @@ export default function ContentBuilderForm() {
       const generatedLatex = generateLatexFromData(resumeData);
       setLatex(generatedLatex);
     }
-  }, [resumeData, mode]);
+  }, [resumeData, mode, setLatex]);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
