@@ -18,7 +18,6 @@ export const UserMenu: React.FC = () => {
 
   const handleSignOut = React.useCallback(() => {
     logout();
-    useAccountStore.getState().resetUser();
     router.push("/login");
   }, [logout, router]);
 

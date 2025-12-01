@@ -1,4 +1,149 @@
 import type { ResumeData } from "@/types/resume";
+import { validateLatexText } from "./utils";
+
+/**
+ * Custom error class for LaTeX validation errors
+ */
+export class LaTeXValidationError extends Error {
+  public invalidChars: string[];
+  public fieldName?: string;
+
+  constructor(message: string, invalidChars: string[], fieldName?: string) {
+    super(message);
+    this.name = "LaTeXValidationError";
+    this.invalidChars = invalidChars;
+    this.fieldName = fieldName;
+  }
+}
+
+/**
+ * Validate all text fields in resume data for non-ASCII characters
+ * @param data - Resume data to validate
+ * @throws LaTeXValidationError if non-ASCII characters are found
+ */
+export function validateResumeDataForLatex(data: ResumeData): void {
+  const fieldsToValidate: { value: string; fieldName: string }[] = [];
+
+  // Personal Info
+  if (data.personalInfo) {
+    fieldsToValidate.push(
+      { value: data.personalInfo.name || "", fieldName: "Name" },
+      { value: data.personalInfo.email || "", fieldName: "Email" },
+      { value: data.personalInfo.phone || "", fieldName: "Phone" },
+      { value: data.personalInfo.address || "", fieldName: "Address" },
+      { value: data.personalInfo.linkedin || "", fieldName: "LinkedIn" },
+      { value: data.personalInfo.github || "", fieldName: "GitHub" },
+    );
+  }
+
+  // Education
+  data.education.forEach((edu, idx) => {
+    fieldsToValidate.push(
+      {
+        value: edu.universityName || "",
+        fieldName: `Education ${idx + 1} - University Name`,
+      },
+      { value: edu.degree || "", fieldName: `Education ${idx + 1} - Degree` },
+      {
+        value: edu.location || "",
+        fieldName: `Education ${idx + 1} - Location`,
+      },
+      {
+        value: edu.datesAttended || "",
+        fieldName: `Education ${idx + 1} - Dates`,
+      },
+      {
+        value: edu.coursework || "",
+        fieldName: `Education ${idx + 1} - Coursework`,
+      },
+    );
+  });
+
+  // Experience
+  data.experience.forEach((exp, idx) => {
+    fieldsToValidate.push(
+      {
+        value: exp.jobTitle || "",
+        fieldName: `Experience ${idx + 1} - Job Title`,
+      },
+      { value: exp.company || "", fieldName: `Experience ${idx + 1} - Company` },
+      {
+        value: exp.location || "",
+        fieldName: `Experience ${idx + 1} - Location`,
+      },
+      { value: exp.dates || "", fieldName: `Experience ${idx + 1} - Dates` },
+      {
+        value: exp.description || "",
+        fieldName: `Experience ${idx + 1} - Description`,
+      },
+    );
+  });
+
+  // Projects
+  data.projects.forEach((proj, idx) => {
+    fieldsToValidate.push(
+      {
+        value: proj.projectName || "",
+        fieldName: `Project ${idx + 1} - Name`,
+      },
+      {
+        value: proj.technologies || "",
+        fieldName: `Project ${idx + 1} - Technologies`,
+      },
+      { value: proj.date || "", fieldName: `Project ${idx + 1} - Date` },
+      {
+        value: proj.description || "",
+        fieldName: `Project ${idx + 1} - Description`,
+      },
+    );
+  });
+
+  // Leadership
+  data.leadership.forEach((lead, idx) => {
+    fieldsToValidate.push(
+      { value: lead.role || "", fieldName: `Leadership ${idx + 1} - Role` },
+      {
+        value: lead.organization || "",
+        fieldName: `Leadership ${idx + 1} - Organization`,
+      },
+      { value: lead.dates || "", fieldName: `Leadership ${idx + 1} - Dates` },
+      {
+        value: lead.description || "",
+        fieldName: `Leadership ${idx + 1} - Description`,
+      },
+    );
+  });
+
+  // Technical Skills
+  if (data.technicalSkills) {
+    fieldsToValidate.push(
+      {
+        value: data.technicalSkills.languages || "",
+        fieldName: "Technical Skills - Languages",
+      },
+      {
+        value: data.technicalSkills.developerTools || "",
+        fieldName: "Technical Skills - Developer Tools",
+      },
+      {
+        value: data.technicalSkills.technologiesFrameworks || "",
+        fieldName: "Technical Skills - Technologies/Frameworks",
+      },
+    );
+  }
+
+  // Validate each field
+  for (const { value, fieldName } of fieldsToValidate) {
+    const validation = validateLatexText(value);
+    if (!validation.isValid) {
+      throw new LaTeXValidationError(
+        `Non-English characters found in "${fieldName}": ${validation.invalidChars.slice(0, 3).join(", ")}`,
+        validation.invalidChars,
+        fieldName,
+      );
+    }
+  }
+}
 
 /**
  * Escape special LaTeX characters in text
@@ -32,9 +177,19 @@ function escapeLatex(text: string): string {
 /**
  * Generate LaTeX document from resume data
  * @param data - Resume data object containing education, experience, projects, etc.
+ * @param skipValidation - Skip validation (useful for preview where validation is handled separately)
  * @returns Complete LaTeX document string
+ * @throws LaTeXValidationError if non-ASCII characters are found and validation is not skipped
  */
-export function generateLatexFromData(data: ResumeData): string {
+export function generateLatexFromData(
+  data: ResumeData,
+  skipValidation = false,
+): string {
+  // Validate all text fields for non-ASCII characters
+  if (!skipValidation) {
+    validateResumeDataForLatex(data);
+  }
+
   // LaTeX preamble
   const preamble = `%-------------------------
 % Resume in Latex

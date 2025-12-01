@@ -4,6 +4,9 @@
  * The API route then forwards requests to the LaTeX service
  */
 
+// Re-export validation error for use in components
+export { LaTeXValidationError } from "./latex-generator";
+
 // Track if LaTeX service is unavailable to prevent repeated failed requests
 let isLatexServiceUnavailable = false;
 

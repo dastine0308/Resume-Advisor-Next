@@ -1,6 +1,29 @@
 import { create } from "zustand";
+import { useResumeStore } from "./useResumeStore";
+import { useJobPostingStore } from "./useJobPostingStore";
+import { useSignupStore } from "./useSignupStore";
+import { useAccountStore } from "./useAccountStore";
+import { useCoverLetterStore } from "./useCoverLetterStore";
 
 const TOKEN_COOKIE_NAME = "auth-token";
+
+// Clear all persisted store data from localStorage and reset state
+function clearAllStores() {
+  // Reset all store states
+  useResumeStore.getState().resetStore();
+  useJobPostingStore.getState().resetStore();
+  useSignupStore.getState().resetSignupForm();
+  useAccountStore.getState().resetUser();
+  useCoverLetterStore.getState().resetStore();
+
+  // Clear localStorage for persisted stores
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("resume-storage");
+    localStorage.removeItem("job-posting-storage");
+    localStorage.removeItem("signup-storage");
+    localStorage.removeItem("account-storage");
+  }
+}
 
 // Cookie utility functions
 function setCookie(name: string, value: string, days: number = 7) {
@@ -37,6 +60,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
   logout: () => {
     deleteCookie(TOKEN_COOKIE_NAME);
+    clearAllStores();
     set({ isAuthenticated: false });
   },
   getToken: () => getCookie(TOKEN_COOKIE_NAME),
