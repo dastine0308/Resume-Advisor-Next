@@ -47,11 +47,23 @@ export function ResumeContent({
       if (response?.job_id) {
         setJobId(response.job_id);
         setResumeTitle(response.title, false);
-        // Use functional update to access current state without adding resumeData as dependency
+        // Get user data from account store for personal info
+        const user = useAccountStore.getState().user;
         const currentResumeData = useResumeStore.getState().resumeData;
         setResumeData(
           {
-            personalInfo: currentResumeData?.personalInfo || {},
+            personalInfo: {
+              name:
+                currentResumeData?.personalInfo?.name ||
+                `${user.first_name} ${user.last_name}`.trim(),
+              email: currentResumeData?.personalInfo?.email || user.email,
+              phone: currentResumeData?.personalInfo?.phone || user.phone,
+              linkedin:
+                currentResumeData?.personalInfo?.linkedin || user.linkedin,
+              github: currentResumeData?.personalInfo?.github || user.github,
+              address:
+                currentResumeData?.personalInfo?.address || user.location,
+            },
             education: response?.sections?.education || [],
             experience: response?.sections?.work_experience || [],
             projects: response?.sections?.projects || [],
@@ -97,6 +109,7 @@ export function ResumeContent({
               phone: user.phone || prev.personalInfo.phone,
               linkedin: user.linkedin || prev.personalInfo.linkedin,
               github: user.github || prev.personalInfo.github,
+              address: user.location || prev.personalInfo.address,
             },
           }),
           false,

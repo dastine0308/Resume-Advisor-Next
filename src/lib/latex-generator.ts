@@ -323,16 +323,28 @@ export function generateLatexFromData(
       const linkedinUrl = info.linkedin.startsWith("http")
         ? info.linkedin
         : `https://linkedin.com/in/${info.linkedin}`;
+      // Extract username from URL for display (e.g., "linkedin.com/in/username")
+      const linkedinMatch = linkedinUrl.match(
+        /linkedin\.com\/in\/([^/?]+)/,
+      );
+      const linkedinDisplay = linkedinMatch
+        ? `linkedin.com/in/${linkedinMatch[1]}`
+        : info.linkedin;
       contactLine.push(
-        `\\href{${escapeLatex(linkedinUrl)}}{\\raisebox{-0.2\\height}\\faLinkedin\\ \\underline{${escapeLatex(info.linkedin)}}}`,
+        `\\href{${escapeLatex(linkedinUrl)}}{\\raisebox{-0.2\\height}\\faLinkedin\\ \\underline{${escapeLatex(linkedinDisplay)}}}`,
       );
     }
     if (info.github) {
       const githubUrl = info.github.startsWith("http")
         ? info.github
         : `https://github.com/${info.github}`;
+      // Extract username from URL for display (e.g., "github.com/username")
+      const githubMatch = githubUrl.match(/github\.com\/([^/?]+)/);
+      const githubDisplay = githubMatch
+        ? `github.com/${githubMatch[1]}`
+        : info.github;
       contactLine.push(
-        `\\href{${escapeLatex(githubUrl)}}{\\raisebox{-0.2\\height}\\faGithub\\ \\underline{${escapeLatex(info.github)}}}`,
+        `\\href{${escapeLatex(githubUrl)}}{\\raisebox{-0.2\\height}\\faGithub\\ \\underline{${escapeLatex(githubDisplay)}}}`,
       );
     }
 
