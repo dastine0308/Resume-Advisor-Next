@@ -265,6 +265,7 @@ export const useResumeStore = create<ResumeStore>()(
         personalInfo: {
           ...useAccountStore.getState().user,
           name: `${useAccountStore.getState().user.first_name} ${useAccountStore.getState().user.last_name}`.trim(),
+          address: useAccountStore.getState().user.location,
         },
         education: [
           {
