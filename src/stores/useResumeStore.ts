@@ -8,6 +8,8 @@ import {
   type ResumeCreateUpdateResponse,
 } from "@/lib/api-services";
 
+export type CompileErrorKind = "busy" | "unavailable" | "validation" | "other";
+
 interface ResumeStore {
   resumeId: string | null;
   setResumeId: (id: string | null) => void;
@@ -42,7 +44,11 @@ interface ResumeStore {
   setPdfPreviewURL: (u: string | null) => void;
 
   compileError: string | null;
-  setCompileError: (e: string | null) => void;
+  compileErrorKind: CompileErrorKind | null;
+  setCompileError: (
+    message: string | null,
+    kind?: CompileErrorKind | null,
+  ) => void;
 
   isPdfGenerating: boolean;
   setIsPdfGenerating: (v: boolean) => void;
@@ -166,7 +172,12 @@ export const useResumeStore = create<ResumeStore>()(
   setPdfPreviewURL: (u) => set({ pdfPreviewURL: u }),
 
   compileError: null,
-  setCompileError: (e) => set({ compileError: e }),
+  compileErrorKind: null,
+  setCompileError: (message, kind = null) =>
+    set({
+      compileError: message,
+      compileErrorKind: message ? (kind ?? "other") : null,
+    }),
 
   isPdfGenerating: false,
   setIsPdfGenerating: (v) => set({ isPdfGenerating: v }),
@@ -265,6 +276,7 @@ export const useResumeStore = create<ResumeStore>()(
       loading: false,
       pdfPreviewURL: null,
       compileError: null,
+      compileErrorKind: null,
       isPdfGenerating: false,
       isSaving: false,
       isCreating: false,

@@ -29,6 +29,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=80
+      - MAX_CONCURRENT_COMPILES=2
+      - MAX_COMPILE_QUEUE=5
+      - COMPILE_QUEUE_WAIT_MS=120000
     restart: unless-stopped
     networks:
       - resume-advisor-network

@@ -33,10 +33,17 @@ export async function checkLatexServiceHealth(): Promise<boolean> {
       method: "GET",
       cache: "no-store",
     });
-    if (response.ok) {
+    const data = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      degraded?: boolean;
+    };
+
+    if (response.ok && data.ok) {
       isLatexServiceUnavailable = false;
+      return true;
     }
-    return response.ok;
+
+    return false;
   } catch (error) {
     console.error("LaTeX service health check failed:", error);
     return false;
@@ -55,6 +62,13 @@ export class LaTeXServiceUnavailableError extends Error {
   }
 }
 
+export class LaTeXServiceBusyError extends Error {
+  constructor(message = "The LaTeX service is busy. Please try again in a moment.") {
+    super(message);
+    this.name = "LaTeXServiceBusyError";
+  }
+}
+
 export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
   // If service is already marked as unavailable, throw immediately
   if (isLatexServiceUnavailable) {
@@ -62,8 +76,6 @@ export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
   }
 
   try {
-    console.log("[LaTeX Client] Sending LaTeX content for compilation...");
-    console.log(`[LaTeX Client] Content length: ${latexContent.length} chars`);
 
     // Use Next.js API route instead of direct service call
     const response = await fetch("/api/compile-latex", {
@@ -79,12 +91,27 @@ export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
     });
 
     if (!response.ok) {
-      // Check if it's a service unavailable error (500 or network error)
+      const errorData = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+        retryable?: boolean;
+      };
+
+      // Transient overload — do not mark the service permanently unavailable
+      if (response.status === 503 && errorData.retryable !== false) {
+        throw new LaTeXServiceBusyError(
+          errorData.message ||
+            "The LaTeX service is busy. Please try again in a moment.",
+        );
+      }
+
       if (response.status >= 500) {
         isLatexServiceUnavailable = true;
-        throw new LaTeXServiceUnavailableError();
+        throw new LaTeXServiceUnavailableError(
+          errorData.message || "LaTeX service is unavailable",
+        );
       }
-      const errorData = await response.json().catch(() => ({}));
+
       throw new Error(
         errorData.message ||
           errorData.error ||
@@ -92,9 +119,7 @@ export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
       );
     }
 
-    // Service is working, ensure it's not marked as unavailable
     isLatexServiceUnavailable = false;
-    console.log("[LaTeX Client] PDF generated successfully");
     return await response.blob();
   } catch (error) {
     // Network errors (fetch failed) indicate service is unavailable

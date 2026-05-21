@@ -4,6 +4,12 @@ const { exec } = require("child_process");
 const fs = require("fs").promises;
 const path = require("path");
 const crypto = require("crypto");
+const {
+  acquireCompileSlot,
+  releaseCompileSlot,
+  getCompileConcurrencyStats,
+  isCompileCapacityExhausted,
+} = require("./concurrency");
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -23,21 +29,59 @@ app.use(express.json({ limit: "10mb" }));
   }
 })();
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "latex-pdf-service" });
+function buildHealthBody() {
+  const overloaded = isCompileCapacityExhausted();
+  return {
+    status: overloaded ? "degraded" : "ok",
+    service: "latex-pdf-service",
+    concurrency: getCompileConcurrencyStats(),
+  };
+}
+
+// Liveness — always 200 while the process is running (safe for orchestrator probes)
+app.get("/health", (_req, res) => {
+  res.json(buildHealthBody());
+});
+
+// Readiness — 503 when the compile queue is saturated
+app.get("/health/ready", (_req, res) => {
+  const body = buildHealthBody();
+  if (body.status === "degraded") {
+    return res.status(503).json(body);
+  }
+  res.json(body);
 });
 
 // LaTeX compilation endpoint
 app.post("/api/compile-latex", async (req, res) => {
   const jobId = crypto.randomBytes(16).toString("hex");
   const jobDir = path.join(TEMP_DIR, jobId);
+  let slotAcquired = false;
 
   try {
     const { latex } = req.body;
 
     if (!latex) {
       return res.status(400).json({ error: "LaTeX content is required" });
+    }
+
+    try {
+      await acquireCompileSlot();
+      slotAcquired = true;
+    } catch (error) {
+      if (
+        error.message === "COMPILE_QUEUE_FULL" ||
+        error.message === "COMPILE_QUEUE_TIMEOUT"
+      ) {
+        return res.status(503).json({
+          error: "Service busy",
+          message:
+            error.message === "COMPILE_QUEUE_TIMEOUT"
+              ? "Compilation queue wait timed out. Please try again."
+              : "Too many concurrent compilations. Please try again in a moment.",
+        });
+      }
+      throw error;
     }
 
     console.log(`[${jobId}] Starting LaTeX compilation...`);
@@ -107,6 +151,10 @@ app.post("/api/compile-latex", async (req, res) => {
       message: error.message,
     });
   } finally {
+    if (slotAcquired) {
+      releaseCompileSlot();
+    }
+
     // Cleanup job directory after a delay
     setTimeout(async () => {
       try {

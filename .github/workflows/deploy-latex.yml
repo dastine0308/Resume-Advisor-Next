@@ -1,16 +1,19 @@
 name: LaTeX Service CI/CD
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "latex-service/**"
       - "Dockerfile.latex"
+      - ".github/workflows/deploy-latex.yml"
   pull_request:
     branches: [main]
     paths:
       - "latex-service/**"
       - "Dockerfile.latex"
+      - ".github/workflows/deploy-latex.yml"
 
 env:
   IMAGE_NAME: ${{ github.repository_owner }}/resume-advisor-latex
@@ -24,6 +27,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Run LaTeX service unit tests
+        run: npm ci && npm test -- --run latex-service/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -60,4 +72,10 @@ jobs:
           az containerapp update \
             --name ca-latex-service \
             --resource-group rg-resume-advisor \
-            --image ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            --image ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --set-env-vars \
+              "NODE_ENV=production" \
+              "PORT=80" \
+              "MAX_CONCURRENT_COMPILES=2" \
+              "MAX_COMPILE_QUEUE=5" \
+              "COMPILE_QUEUE_WAIT_MS=120000"

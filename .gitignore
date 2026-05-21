@@ -47,3 +47,5 @@ next-env.d.ts
 
 # docker
 latex-service/node_modules
+
+.venv-svg
