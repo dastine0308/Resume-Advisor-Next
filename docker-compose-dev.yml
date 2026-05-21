@@ -34,6 +34,9 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=5400
+      - MAX_CONCURRENT_COMPILES=2
+      - MAX_COMPILE_QUEUE=5
+      - COMPILE_QUEUE_WAIT_MS=120000
     volumes:
       - ./latex-service:/app
       - /app/node_modules

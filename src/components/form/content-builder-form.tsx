@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { DraggableSection } from "@/components/resume/DraggableSection";
 import { useJobPostingStore, useResumeStore } from "@/stores";
+import type { CompileErrorKind } from "@/stores/useResumeStore";
 import { Breadcrumb } from "@/components/resume/Breadcrumb";
 import { FormField } from "@/components/resume/FormField";
 import { VersionHistoryDropdown } from "@/components/resume/VersionHistoryDropdown";
@@ -30,6 +31,7 @@ import type {
 } from "@/types/resume";
 import {
   generateLaTeXPreviewURL,
+  LaTeXServiceBusyError,
   LaTeXServiceUnavailableError,
   getLatexServiceUnavailable,
   LaTeXValidationError,
@@ -52,6 +54,35 @@ import { AiCreditHint } from "@/components/ui/AiCreditHint";
 import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
 
 const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
+const NORMAL_DEBOUNCE_MS = 700;
+const BUSY_DEBOUNCE_MS = 3000;
+const BUSY_COOLDOWN_MS = 5000;
+
+const ERROR_KIND_STYLES: Record<
+  CompileErrorKind,
+  { card: string; text: string; title: string }
+> = {
+  busy: {
+    card: "border-amber-200 bg-amber-50 text-amber-900",
+    text: "text-amber-900",
+    title: "PDF preview temporarily unavailable",
+  },
+  unavailable: {
+    card: "border-gray-200 bg-gray-50 text-gray-700",
+    text: "text-gray-700",
+    title: "PDF preview unavailable",
+  },
+  validation: {
+    card: "border-red-200 bg-red-50 text-red-800",
+    text: "text-red-800",
+    title: "Cannot generate preview",
+  },
+  other: {
+    card: "border-red-200 bg-red-50 text-red-800",
+    text: "text-red-800",
+    title: "Preview failed",
+  },
+};
 
 type ArraySectionKey = "education" | "experience" | "projects" | "leadership";
 type EnrichSectionType = "experience" | "project" | "leadership";
@@ -82,6 +113,7 @@ export default function ContentBuilderForm({
     setLoading,
     setPdfPreviewURL,
     compileError,
+    compileErrorKind,
     setCompileError,
     pdfPreviewURL,
   } = useResumeStore();
@@ -384,16 +416,41 @@ export default function ContentBuilderForm({
     });
   }, []);
 
+  const debounceRef = useRef<number | null>(null);
+  const compileInFlightRef = useRef(false);
+  const pendingCompileRef = useRef(false);
+  const busyUntilRef = useRef(0);
+
+  const getCompileDelayMs = () => {
+    const remaining = busyUntilRef.current - Date.now();
+    if (remaining > 0) {
+      return Math.max(BUSY_DEBOUNCE_MS, remaining);
+    }
+    return NORMAL_DEBOUNCE_MS;
+  };
+
   const compileLaTeX = async () => {
-    // Skip compilation if service is already known to be unavailable
-    if (getLatexServiceUnavailable()) {
-      showServiceUnavailableToast();
+    if (compileInFlightRef.current) {
+      pendingCompileRef.current = true;
       return;
     }
 
+    // Skip compilation if service is already known to be unavailable
+    if (getLatexServiceUnavailable()) {
+      showServiceUnavailableToast();
+      setCompileError("LaTeX service is unavailable", "unavailable");
+      return;
+    }
+
+    compileInFlightRef.current = true;
     setLoading(true);
-    setCompileError(null);
-    setPdfPreviewURL(null); // Clear previous preview
+    const stillInBusyCooldown =
+      compileErrorKind === "busy" && busyUntilRef.current > Date.now();
+    if (!stillInBusyCooldown) {
+      setCompileError(null);
+    }
+
+    const previousPreviewURL = pdfPreviewURL;
 
     try {
       // Validate resume data for non-English characters before generating LaTeX
@@ -409,6 +466,9 @@ export default function ContentBuilderForm({
       // Success - dismiss any existing error toast
       toast.dismiss(LATEX_SERVICE_TOAST_ID);
       setPdfPreviewURL(previewURL);
+      if (previousPreviewURL && previousPreviewURL !== previewURL) {
+        URL.revokeObjectURL(previousPreviewURL);
+      }
     } catch (error) {
       console.error("[Content Builder] LaTeX compilation failed:", error);
 
@@ -422,21 +482,37 @@ export default function ContentBuilderForm({
         });
         setCompileError(
           `Non-English characters found${fieldInfo}. Please use English text only.`,
+          "validation",
         );
+        return;
+      }
+
+      if (error instanceof LaTeXServiceBusyError) {
+        busyUntilRef.current = Date.now() + BUSY_COOLDOWN_MS;
+        setCompileError(error.message, "busy");
         return;
       }
 
       if (error instanceof LaTeXServiceUnavailableError) {
         showServiceUnavailableToast();
-        setCompileError("LaTeX service is unavailable");
+        setCompileError("LaTeX service is unavailable", "unavailable");
         return;
       }
 
       const errorMessage =
         error instanceof Error ? error.message : "LaTeX compilation failed";
-      setCompileError(errorMessage);
+      setCompileError(errorMessage, "other");
     } finally {
+      compileInFlightRef.current = false;
       setLoading(false);
+
+      if (pendingCompileRef.current) {
+        pendingCompileRef.current = false;
+        if (debounceRef.current) window.clearTimeout(debounceRef.current);
+        debounceRef.current = window.setTimeout(() => {
+          void compileLaTeX();
+        }, getCompileDelayMs());
+      }
     }
   };
 
@@ -609,8 +685,6 @@ export default function ContentBuilderForm({
     [setResumeData],
   );
 
-  const debounceRef = useRef<number | null>(null); // Sync LaTeX with form data whenever resumeData changes
-
   // Sync LaTeX with form data whenever resumeData changes
   // Skip validation here - validation is handled in compileLaTeX
   useEffect(() => {
@@ -624,7 +698,7 @@ export default function ContentBuilderForm({
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void compileLaTeX();
-    }, 700);
+    }, getCompileDelayMs());
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
@@ -1247,11 +1321,14 @@ export default function ContentBuilderForm({
                     spellCheck={false}
                   />
                 </div>
-                {compileError && (
-                  <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3">
-                    <p className="text-sm text-red-800">{compileError}</p>
-                  </div>
-                )}
+                {compileError && (() => {
+                  const styles = ERROR_KIND_STYLES[compileErrorKind ?? "other"];
+                  return (
+                    <div className={`mt-3 rounded-md border p-3 ${styles.card}`}>
+                      <p className={`text-sm ${styles.text}`}>{compileError}</p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -1263,11 +1340,23 @@ export default function ContentBuilderForm({
             <h3 className="text-md font-bold text-gray-800">Live Preview</h3>
           </div>
 
-          <div className="flex-1 p-4">
+          <div className="flex flex-1 flex-col p-4">
+            {compileError && compileErrorKind === "busy" && (
+              <div className="mb-3 shrink-0 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-medium text-amber-900">
+                  PDF preview temporarily unavailable
+                </p>
+                <p className="text-sm text-amber-900">{compileError}</p>
+                <p className="mt-2 text-xs text-amber-800/80">
+                  Showing previous preview. It will update automatically when
+                  you edit your resume.
+                </p>
+              </div>
+            )}
             {pdfPreviewURL ? (
               <iframe
                 src={pdfPreviewURL}
-                className="h-full w-full border bg-white"
+                className="min-h-0 w-full flex-1 border bg-white"
                 title="PDF Preview"
                 style={{
                   maxWidth: "210mm",
@@ -1281,6 +1370,32 @@ export default function ContentBuilderForm({
                   <div className="text-xs">Converting LaTeX to PDF</div>
                 </div>
               </div>
+            ) : compileError ? (
+              <div className="flex h-full items-center justify-center p-4">
+                {(() => {
+                  const kind = compileErrorKind ?? "other";
+                  const styles = ERROR_KIND_STYLES[kind];
+                  return (
+                    <div
+                      className={`max-w-md rounded-md border p-5 text-center ${styles.card}`}
+                    >
+                      <p className="mb-2 font-medium">{styles.title}</p>
+                      <p className="text-sm">{compileError}</p>
+                      {kind === "busy" && (
+                        <p className="mt-3 text-xs opacity-80">
+                          Preview will update automatically when you edit your
+                          resume.
+                        </p>
+                      )}
+                      {kind === "unavailable" && (
+                        <p className="mt-3 text-xs opacity-80">
+                          Please contact support to activate PDF preview.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center text-gray-500">
                 <div className="max-w-5xl text-center">
@@ -1288,9 +1403,7 @@ export default function ContentBuilderForm({
                     Edit the form or LaTeX to generate a PDF preview.
                   </div>
                   <div className="text-xs">
-                    {compileError
-                      ? "Please Contact Support to Activate PDF Preview"
-                      : "Direct LaTeX to PDF conversion with LaTeX support."}
+                    Direct LaTeX to PDF conversion with LaTeX support.
                   </div>
                 </div>
               </div>

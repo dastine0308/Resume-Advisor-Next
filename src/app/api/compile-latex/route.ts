@@ -4,6 +4,10 @@ import {
   getLatexServiceUrl,
   MAX_LATEX_BODY_BYTES,
 } from "@/lib/latex-service-url";
+import {
+  LATEX_HEALTH_TIMEOUT_MS,
+  getLatexCompileTimeoutMs,
+} from "@/lib/latex-timeouts";
 
 const LATEX_SERVICE_URL = getLatexServiceUrl();
 
@@ -22,18 +26,25 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // Check if LaTeX service is healthy
-    console.log("[LaTeX API] Checking LaTeX service health...");
-    const healthResponse = await fetch(`${LATEX_SERVICE_URL}/health`);
+    console.log("[LaTeX API] Checking LaTeX service readiness...");
+    const healthResponse = await fetch(`${LATEX_SERVICE_URL}/health/ready`, {
+      signal: AbortSignal.timeout(LATEX_HEALTH_TIMEOUT_MS),
+    });
     if (!healthResponse.ok) {
-      console.error("[LaTeX API] LaTeX service is unavailable");
+      const isBusy = healthResponse.status === 503;
+      console.error(
+        "[LaTeX API] LaTeX service health check failed:",
+        healthResponse.status,
+      );
       return NextResponse.json(
         {
-          error: "LaTeX service is unavailable",
-          message:
-            "The LaTeX compilation service is currently offline. Please try again later.",
+          error: isBusy ? "Service busy" : "LaTeX service is unavailable",
+          message: isBusy
+            ? "The LaTeX compilation service is busy. Please try again in a moment."
+            : "The LaTeX compilation service is currently offline. Please try again later.",
+          retryable: isBusy,
         },
-        { status: 503 },
+        { status: isBusy ? 503 : 502 },
       );
     }
 
@@ -74,26 +85,40 @@ export async function POST(request: NextRequest) {
     console.log("[LaTeX API] Starting LaTeX compilation...");
     console.log(`[LaTeX API] LaTeX length: ${latex.length} characters`);
 
-    // Forward request to LaTeX service
     const response = await fetch(`${LATEX_SERVICE_URL}/api/compile-latex`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ latex }),
+      signal: AbortSignal.timeout(getLatexCompileTimeoutMs()),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error("[LaTeX API] Compilation failed:", errorData);
+
+      if (response.status === 503) {
+        return NextResponse.json(
+          {
+            error: errorData.error || "Service busy",
+            message:
+              errorData.message ||
+              "Too many concurrent compilations. Please try again in a moment.",
+            retryable: true,
+          },
+          { status: 503 },
+        );
+      }
+
       return NextResponse.json(
         {
-          error: "LaTeX compilation failed",
+          error: errorData.error || "LaTeX compilation failed",
           message:
             errorData.message ||
             "Failed to compile LaTeX. Please check your LaTeX syntax.",
         },
-        { status: 500 },
+        { status: response.status },
       );
     }
 
@@ -104,7 +129,6 @@ export async function POST(request: NextRequest) {
       `[LaTeX API] PDF generated successfully in ${duration}ms (${pdfBuffer.byteLength} bytes)`,
     );
 
-    // Return PDF
     return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
@@ -116,6 +140,19 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[LaTeX API] Unexpected error:", error);
+
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return NextResponse.json(
+        {
+          error: "LaTeX service timeout",
+          message:
+            "Compilation took too long or the service is overloaded. Please try again.",
+          retryable: true,
+        },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error",

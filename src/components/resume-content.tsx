@@ -379,7 +379,28 @@ export function ResumeContent({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to compile LaTeX");
+        if (response.status === 503) {
+          const message =
+            errorData.message ||
+            "The LaTeX service is busy. Please try again in a moment.";
+          toast.warning(message);
+          setCompileError(message, "busy");
+          return;
+        }
+        if (response.status === 502 || response.status >= 500) {
+          const message =
+            errorData.message ||
+            errorData.error ||
+            "LaTeX service is unavailable";
+          toast.warning("Please Contact Support to Activate PDF Preview");
+          setCompileError(message, "unavailable");
+          return;
+        }
+        setCompileError(
+          errorData.message || errorData.error || "Failed to download PDF",
+          "other",
+        );
+        return;
       }
 
       const blob = await response.blob();

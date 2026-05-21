@@ -14,9 +14,11 @@ export const Header = () => {
           rel="nofollow"
           className="flex cursor-pointer items-center"
         >
-          <span className="text-base font-bold text-indigo-500 md:text-lg">
-            Resume Advisor
-          </span>
+          <img
+            src="/logo.svg"
+            alt="Resume Advisor"
+            className="h-8 w-auto max-w-36 shrink-0 md:h-9 md:max-w-44"
+          />
         </Link>
       </div>
       <div className="flex items-center gap-3">
