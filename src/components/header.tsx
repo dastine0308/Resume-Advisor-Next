@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import UserMenu from "@/components/user-menu";
+import { CreditsBadge } from "@/components/ui/CreditsBadge";
 
 export const Header = () => {
   return (
@@ -18,7 +19,10 @@ export const Header = () => {
           </span>
         </Link>
       </div>
-      <UserMenu />
+      <div className="flex items-center gap-3">
+        <CreditsBadge />
+        <UserMenu />
+      </div>
     </header>
   );
 };

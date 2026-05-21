@@ -42,15 +42,20 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({
       <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+        <div className="absolute right-0 top-full mt-2 w-48 overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-lg">
           <div
-            className="flex min-w-32 cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-gray-100"
+            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-gray-100"
             onClick={() => {
               setIsOpen(false);
               onNavigateToAccountSettingsPage();
             }}
           >
-            <p className="grow text-sm font-medium text-indigo-600">{email}</p>
+            <p
+              className="min-w-0 grow truncate text-sm font-medium text-indigo-600"
+              title={email}
+            >
+              {email}
+            </p>
           </div>
           <div
             className="flex min-w-32 cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-gray-100"

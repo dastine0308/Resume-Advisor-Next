@@ -9,8 +9,8 @@ A modern, fully responsive resume builder application built with Next.js, React,
 - **🧩 Modular Component Architecture**: Decoupled, reusable components following SOLID principles
 - **⚡ Type-Safe**: Full TypeScript support with comprehensive type definitions
 - **🎨 Modern UI**: Built with Tailwind CSS utility-first approach
-- **🔐 Authentication**: Secure authentication with NextAuth.js and JWT tokens
-- **🔄 API Integration**: Axios-based API client with automatic token injection and error handling
+- **🔐 Authentication**: Supabase Auth with Google OAuth and cookie-based sessions
+- **🔄 API Integration**: Next.js Route Handlers under `/api` with an Axios client (`withCredentials`) for authenticated requests
 - **📝 Multiple Resume Sections**: Education, Experience, Projects, Leadership, and Technical Skills
 - **🎯 Drag & Drop**: Intuitive drag-and-drop section reordering with @dnd-kit
 - **✅ Form Validation**: Zod-based schema validation for all forms
@@ -52,16 +52,26 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit the `.env` file with your configuration:
+Copy environment variables from the example file and fill in your Supabase and Groq credentials:
+
+```bash
+cp .env.example .env.local
+```
 
 ```env
 # Next.js
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-super-secret-key-change-this-in-production
 
-# Backend API
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Groq (AI: job analysis, description enrich, cover letter)
+GROQ_API_KEY=your-groq-api-key
+
+# LaTeX PDF service (Docker dev default)
+LATEX_SERVICE_URL=http://localhost:5400
 ```
 
 4. Run the development server:
@@ -96,7 +106,7 @@ docker-compose -f docker-compose.dev.yml up --build
 This will start two services:
 
 - **Next.js App**: Available at [http://localhost:3000](http://localhost:3000)
-- **LaTeX Service**: Available at [http://localhost:3002](http://localhost:3002)
+- **LaTeX Service**: Available at [http://localhost:5400](http://localhost:5400)
 
 3. To stop the services:
 
@@ -150,8 +160,6 @@ src/
 │   │   ├── KeywordChip.tsx    # Keyword chip component
 │   │   └── index.ts           # Resume components exports
 │   └── form/                  # Form components
-│       ├── sign-up-form.tsx   # User signup form
-│       ├── profile-set-up-form.tsx # Profile setup form
 │       ├── content-builder-form.tsx # Resume content builder form
 │       └── job-description-form.tsx # Job description form
 ├── types/
@@ -161,52 +169,40 @@ src/
 │   └── keywords.ts            # Keywords type definitions
 ├── stores/
 │   ├── useAccountStore.ts     # Zustand store for account state
-│   ├── useSignupStore.ts      # Zustand store for signup flow
-│   ├── useJobPostingStore.ts    # Zustand store for Job posting state
+│   ├── useJobPostingStore.ts  # Zustand store for job posting state
 │   ├── useResumeStore.ts      # Zustand store for resume state
+│   ├── useAuthStore.ts        # Auth session UI state
+│   ├── useCoverLetterStore.ts # Cover letter editor state
 │   └── index.ts               # Store exports
 ├── hooks/
-│   ├── useUserData.ts         # Custom hook for user data management
-│   ├── useResumeForm.ts       # Custom hook for resume form state
-│   ├── usePDFGeneration.ts    # Custom hook for PDF generation
+│   ├── useProfile.ts          # React Query: user profile
+│   ├── useDocuments.ts        # React Query: resumes & cover letters
+│   ├── useResumeVersions.ts   # React Query: resume version history
+│   ├── useResumeForm.ts       # Resume form helpers
+│   ├── usePDFGeneration.ts    # PDF generation helpers
 │   └── index.ts               # Hooks exports
 ├── lib/
-│   ├── api-client.ts          # Axios instance with auth interceptors
-│   ├── api-services.ts        # API service functions
-│   ├── utils.ts               # Utility functions
+│   ├── api-client.ts          # Axios client → `/api` (cookie auth)
+│   ├── api-services.ts        # Typed API service functions
+│   ├── supabase/              # Supabase browser & server clients
+│   ├── auth-helper.ts         # `getAuthUser()` for Route Handlers
+│   ├── resume-versions.ts     # Resume version snapshots
 │   ├── latex-client.ts        # LaTeX service client
 │   ├── latex-generator.ts     # LaTeX template generator
-│   └── auth/
-│       └── index.ts           # NextAuth configuration
+│   └── latex-parser.ts        # LaTeX → form data parser
 └── app/
-    ├── (dashboard)/           # Dashboard route group
-    │   └── page.tsx           # Dashboard home page
-    ├── providers/             # React context providers
-    │   ├── auth-provider.tsx  # Authentication provider
-    │   └── themeProvider.tsx  # Theme provider
-    ├── resume/
-    │   └── page.tsx           # Resume builder page
-    ├── settings/
-    │   └── page.tsx           # Account settings page
-    ├── cover-letter/
-    │   └── page.tsx           # Cover letter page
-    ├── login/
-    │   └── page.tsx           # Login page
-    ├── signup/
-    │   └── page.tsx           # Signup page
-    ├── api/
-    │   ├── auth/
-    │   │   └── [...nextauth]/
-    │   │       └── route.ts   # NextAuth API routes
-    │   ├── compile-latex/
-    │   │   ├── route.ts       # LaTeX compilation API endpoint
-    │   │   └── health/
-    │   │       └── route.ts   # Health check endpoint
-    │   └── analyze-job-description/
-    │        └── route.ts      # Job description analysis API endpoint
-    ├── layout.tsx             # Root layout
-    ├── page.tsx               # Landing page
-    └── globals.css            # Global styles
+    ├── (main)/                # Authenticated app routes
+    │   ├── dashboard/         # Document dashboard
+    │   ├── resume/          # Resume builder
+    │   ├── cover-letter/    # Cover letter editor
+    │   └── settings/        # Account settings
+    ├── (auth)/              # Login (Google OAuth)
+    ├── profile/setup/       # First-time profile (OAuth users)
+    ├── providers/           # AuthProvider, QueryProvider
+    ├── api/                 # Route Handlers (resumes, jobs, AI, user, …)
+    ├── auth/callback/       # Supabase OAuth callback
+    ├── layout.tsx
+    └── page.tsx             # Landing page
 
 latex-service/                 # LaTeX to PDF microservice
 ├── server.js                  # Express server for LaTeX compilation
@@ -266,10 +262,8 @@ Domain-specific components for resume building:
 
 Specialized form components with validation:
 
-- **SignUpForm**: Multi-step user registration form
-- **ProfileSetUpForm**: User profile setup form
-- **ContentBuilderForm**: Resume content creation form
-- **JobDescriptionForm**: Job description input form
+- **ContentBuilderForm**: Resume content creation (form + LaTeX mode, version history)
+- **JobDescriptionForm**: Job description input and AI analysis
 
 ## 🗄️ State Management with Zustand
 
@@ -285,15 +279,7 @@ Manages user account state and profile data:
 - Account settings
 - Profile update operations
 
-#### Signup Store (`stores/useSignupStore.ts`)
-
-Handles the multi-step signup flow:
-
-- Current step tracking
-- Form data persistence across steps
-- Validation state management
-
-#### Keywords Store (`stores/useJobPostingStore.ts`)
+#### Job Posting Store (`stores/useJobPostingStore.ts`)
 
 Manages job description analysis and keyword selection:
 
@@ -319,140 +305,97 @@ Manages resume content and structure:
 
 ## 🎣 Custom Hooks
 
-The application includes several custom React hooks for common operations:
+Server state is handled with **TanStack React Query**; editor state uses **Zustand** (with persistence where needed).
 
-### User Data Hook (`hooks/useUserData.ts`)
-
-Automatically fetches and syncs user data with the account store:
+### Profile (`hooks/useProfile.ts`)
 
 ```typescript
-const { isLoading, isAuthenticated } = useUserData();
+const { data: user, isLoading } = useProfile();
 ```
 
-- Triggers on user login or session restoration
-- Prevents duplicate API calls
-- Automatically updates account store
-- Returns authentication status
+Fetches the current user profile from `GET /api/user`.
 
-### Resume Form Hook (`hooks/useResumeForm.ts`)
+### Documents (`hooks/useDocuments.ts`)
 
-Manages resume form state and operations:
+```typescript
+const { data: resumes } = useResumes();
+const { data: resume } = useResume(resumeId);
+const { data: job } = useJobPosting(jobId);
+```
 
-- Form data management
-- Section CRUD operations
-- Validation handling
-- Form submission logic
+List/load resumes and cover letters; includes optimistic delete mutations.
 
-### PDF Generation Hook (`hooks/usePDFGeneration.ts`)
+### Resume Versions (`hooks/useResumeVersions.ts`)
 
-Handles LaTeX PDF generation:
+Lists and restores resume snapshots from `GET/POST /api/resumes/[id]/versions`.
 
-- Resume compilation to LaTeX
-- PDF download management
-- Error handling for compilation failures
-- Loading state management
+### Resume Form & PDF (`hooks/useResumeForm.ts`, `hooks/usePDFGeneration.ts`)
+
+Form helpers and LaTeX PDF preview/generation utilities.
 
 ## 🔌 API Integration
 
-The application uses a centralized API client architecture for all backend communication.
+All backend logic runs as **Next.js Route Handlers** under `/api`. The browser talks to the same origin (no separate Java backend).
 
 ### API Client (`lib/api-client.ts`)
 
-Axios-based HTTP client with the following features:
-
-#### Configuration
-
 ```typescript
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1",
+  baseURL: "/api",
   timeout: 10000,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  withCredentials: true, // Supabase session cookies
 });
 ```
 
-#### Request Interceptor
-
-- Automatic JWT token injection from NextAuth session
-- Adds `Authorization: Bearer <token>` header to all requests
-- Retrieves token from active session automatically
-
-#### Response Interceptor
-
-- Unified error handling across all API calls
-- Automatic extraction of data from backend response structure
-- Network error detection and user-friendly error messages
-- Error logging for debugging
+- **Session**: Supabase sets HTTP-only cookies; no manual `Authorization` header in the client
+- **401**: Redirects to `/login` when a protected request fails
+- **Errors**: Surfaces `error` / `message` from JSON responses
 
 ### API Services (`lib/api-services.ts`)
 
-Type-safe service functions for all API endpoints:
+Typed helpers for Route Handlers, for example:
 
-#### Authentication
+| Area | Examples |
+|------|----------|
+| User | `getUserData`, `updateUserData`, `deleteUser` |
+| Resumes | `getUserResumes`, `getResumeById`, `createOrUpdateResume`, `deleteResume` |
+| Jobs | `getJobPosting`, `createOrUpdateJobPosting`, `analyzeJobDescription` |
+| Cover letters | `getUserCoverLetters`, `createOrUpdateCoverLetter` |
+| Versions | `listResumeVersions`, `restoreResumeVersion` |
 
-- `login(credentials)`: User login with email/password
-- `signup(data)`: User registration with profile data
-
-#### User Management
-
-- `getUserData()`: Fetch current user profile
-- `updateUserData(data)`: Update user profile
-- `deleteUser()`: Delete user account
+AI routes (`/api/ai/analyze-job`, `/api/enrich-description`, `/api/generate-cover-letter`) require an authenticated session.
 
 ### Usage Example
 
 ```typescript
 import { getUserData, updateUserData } from "@/lib/api-services";
 
-// Fetch user data
 const user = await getUserData();
-
-// Update user profile
-const updatedUser = await updateUserData({
-  first_name: "John",
-  last_name: "Doe",
-  location: "San Francisco, CA"
-});
+await updateUserData({ first_name: "Jane", last_name: "Doe", location: "Calgary, AB" });
 ```
-
-### Error Handling
-
-All API calls include automatic error handling:
-
-- Network errors: Connection issues, timeouts
-- Server errors: 4xx and 5xx HTTP status codes
-- Response validation: Type-safe responses with TypeScript
 
 ## 🔐 Authentication
 
-The application uses **NextAuth.js** for secure authentication:
+Authentication uses **Supabase Auth** with **Google OAuth**:
 
 ### Features
 
-- JWT-based session management
-- Secure credential authentication
-- Automatic token refresh
-- Session persistence across page reloads
-- Protected routes with middleware
+- Cookie-based sessions (via `@supabase/ssr`)
+- Middleware refreshes sessions and protects app routes
+- New OAuth users complete profile at `/profile/setup`
+- Logout clears Supabase session and local Zustand persistence
 
 ### Authentication Flow
 
-1. User submits login credentials
-2. NextAuth validates credentials via backend API
-3. JWT token stored in secure session
-4. Token automatically included in all API requests
-5. Session expires after inactivity period
+1. User signs in with Google on `/login`
+2. Supabase redirects to `/auth/callback` to exchange the code
+3. If no `profiles` row exists → `/profile/setup`; otherwise → `/dashboard`
+4. Route Handlers call `getAuthUser()` to read the session from cookies
+5. AI and data APIs reject unauthenticated requests with `401`
 
 ### Configuration
 
-Environment variables required:
-
-```env
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-super-secret-key
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
-```
+See `.env.example` for `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, and `GROQ_API_KEY`.
 
 ## 🎨 Design Principles
 
@@ -506,7 +449,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
 
 The application includes a dedicated LaTeX microservice for generating professional PDF resumes:
 
-- **Service**: Express.js server running on port 3002
+- **Service**: Express.js server running on port 5400 (dev Docker)
 - **Functionality**: Compiles LaTeX templates to PDF format
 - **Integration**: REST API endpoint at `/api/compile-latex`
 - **Deployment**: Containerized with Docker using TeX Live
@@ -568,10 +511,11 @@ This project uses:
 - [x] ✅ Complete RWD implementation
 - [x] ✅ Authentication system
 - [x] ✅ API integration
-- [ ] Auto-save functionality
+- [x] ✅ Auto-save functionality
 - [ ] AI-powered Smartfill feature
 - [ ] Enhanced PDF export functionality
-- [ ] Unit and integration tests
+- [x] ✅ Unit tests (Vitest: LaTeX parser, resume versions)
+- [ ] Integration / E2E tests
 - [ ] End-to-end testing with Playwright
 - [ ] Dark mode support (nice to have)
 - [ ] Touch gesture optimizations (swipe to delete, etc.) (nice to have)

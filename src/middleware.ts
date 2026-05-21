@@ -1,45 +1,53 @@
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-const TOKEN_COOKIE_NAME = "auth-token";
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isPublic =
+    pathname === "/" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/auth/");
 
-// Public routes that don't require authentication
-const publicPrefixes = ["/login", "/signup", "/"];
+  // Must forward refreshed cookies to both the request and response so that
+  // session tokens are kept alive and chunked cookies are handled correctly.
+  let response = NextResponse.next({ request });
 
-export function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
-
-  // Check if the requested path is a public route
-  const isPublicRoute = publicPrefixes.some((route) =>
-    pathname.startsWith(route),
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          );
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
+        },
+      },
+    },
   );
 
-  if (isPublicRoute) {
-    return NextResponse.next();
+  // getUser() also refreshes the session if it is close to expiry.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!isPublic && !user) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Check for auth token in cookies
-  const token = req.cookies.get(TOKEN_COOKIE_NAME)?.value;
-
-  if (!token) {
-    // Redirect to login if no token
-    const loginUrl = new URL("/login", req.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - api (API routes - handled by rewrites)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (public folder)
-     */
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

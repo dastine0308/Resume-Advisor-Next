@@ -6,3 +6,4 @@ export { DashboardCard } from "./DashboardCard";
 export { Tab, Tabs } from "./Tabs";
 export { UserDropdown } from "./UserDropdown";
 export { Dropdown } from "./Dropdown";
+export { Modal } from "./Modal";

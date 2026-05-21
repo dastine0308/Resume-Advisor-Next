@@ -7,17 +7,17 @@ import type {
 import { createOrUpdateCoverLetter } from "@/lib/api-services";
 
 interface CoverLetterStore {
-  coverLetterId: number | null;
-  setCoverLetterId: (id: number | null) => void;
+  coverLetterId: string | null;
+  setCoverLetterId: (id: string | null) => void;
 
   title: string;
   setTitle: (title: string) => void;
 
-  resumeId: number | null;
-  setResumeId: (id: number | null) => void;
+  resumeId: string | null;
+  setResumeId: (id: string | null) => void;
 
-  jobId: number | null;
-  setJobId: (id: number | null) => void;
+  jobId: string | null;
+  setJobId: (id: string | null) => void;
 
   prompt: string;
   setPrompt: (prompt: string) => void;
@@ -85,7 +85,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
   isSaving: false,
   saveError: null,
   saveCoverLetter: async () => {
-    const { coverLetterId, title, jobId, content } = get();
+    const { coverLetterId, title, jobId, content, resumeId } = get();
 
     if (jobId === null) {
       set({ saveError: "Job ID is required to save cover letter" });
@@ -106,7 +106,7 @@ export const useCoverLetterStore = create<CoverLetterStore>((set, get) => ({
       id: coverLetterId || undefined,
       job_id: jobId,
       title: `${content?.company || "Cover Letter"} - ${content?.position || "Position"}`,
-      content: content,
+      content: { ...content, resume_id: resumeId },
     };
 
     set({ isSaving: true, saveError: null });

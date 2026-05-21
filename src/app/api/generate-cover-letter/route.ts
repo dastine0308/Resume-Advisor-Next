@@ -1,4 +1,10 @@
-import { openai } from "@ai-sdk/openai";
+import { groq } from "@/lib/groq";
+import { getAuthUser } from "@/lib/auth-helper";
+import {
+  logAiUsage,
+  refundAiCredits,
+  requireAiCredits,
+} from "@/lib/ai-credits.server";
 import { streamText } from "ai";
 
 interface ResumeData {
@@ -50,6 +56,12 @@ interface PersonalInfo {
 }
 
 export async function POST(req: Request) {
+  const { user, supabase, error: authError } = await getAuthUser();
+  if (authError) return authError;
+
+  const credits = await requireAiCredits(supabase!, user!.id, "cover_letter");
+  if (!credits.ok) return credits.response;
+
   try {
     const body = await req.json();
     const {
@@ -82,6 +94,7 @@ export async function POST(req: Request) {
 
     // Validate required fields
     if (!resumeData) {
+      await refundAiCredits(user!.id, credits.cost);
       return Response.json(
         { error: "Resume data is required" },
         { status: 400 },
@@ -89,6 +102,7 @@ export async function POST(req: Request) {
     }
 
     if (!userPrompt || userPrompt.trim() === "") {
+      await refundAiCredits(user!.id, credits.cost);
       return Response.json(
         { error: "Descriptive prompt is required and cannot be empty" },
         { status: 400 },
@@ -98,6 +112,7 @@ export async function POST(req: Request) {
     if (
       !["Professional", "Friendly", "Enthusiastic", "Formal"].includes(tone)
     ) {
+      await refundAiCredits(user!.id, credits.cost);
       return Response.json(
         {
           error:
@@ -125,7 +140,7 @@ export async function POST(req: Request) {
 
     // Stream the cover letter generation
     const result = streamText({
-      model: openai("gpt-4o-mini"),
+      model: groq.chat("llama-3.3-70b-versatile"),
       system: systemPrompt,
       prompt: userMessage,
       temperature: 0.8,
@@ -140,8 +155,17 @@ export async function POST(req: Request) {
             const data = `0:${JSON.stringify({ text: chunk })}\n`;
             controller.enqueue(encoder.encode(data));
           }
+
+          const usage = await result.usage;
+          await logAiUsage(
+            user!.id,
+            "cover_letter",
+            credits.cost,
+            usage?.totalTokens,
+          );
           controller.close();
         } catch (error) {
+          await refundAiCredits(user!.id, credits.cost);
           console.error("Stream error:", error);
           controller.error(error);
         }
@@ -155,6 +179,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    await refundAiCredits(user!.id, credits.cost);
     console.error("Error generating cover letter:", error);
     return Response.json(
       { error: "Failed to generate cover letter" },

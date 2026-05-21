@@ -1,8 +1,3 @@
-/**
- * Cover Letter Type Definitions
- * Matches backend structure from cover_letters.py
- */
-
 export interface CoverLetterContent {
   paragraphs: string[];
   closing_signature: string;
@@ -10,35 +5,35 @@ export interface CoverLetterContent {
   descriptive_prompt: string;
   position: string;
   recipient: string;
-  resume_id: number | null;
+  resume_id: string | null;
   tone: "Professional" | "Friendly" | "Enthusiastic" | "Formal";
 }
 
 export interface CoverLetter {
-  id: number;
+  id: string;
   title: string;
-  job_id: number;
+  job_id: string;
   creation_date: string;
   last_updated: string;
   content: CoverLetterContent;
 }
 
 export interface CoverLetterListItem {
-  id: number;
+  id: string;
   title: string;
-  job_id: number;
+  job_id: string;
   last_updated: string;
 }
 
 export interface CreateUpdateCoverLetterRequest {
-  id?: number;
+  id?: string;
   title: string;
-  job_id: number;
+  job_id: string;
   content: CoverLetterContent;
 }
 
 export interface CreateUpdateCoverLetterResponse {
   success: boolean;
-  cover_letter_id: number;
+  cover_letter_id: string;
   message: string;
 }

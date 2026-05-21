@@ -1,25 +1,45 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { Button, Dropdown } from "@/components/ui";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
+import { SaveStatusBar, type SaveStatus } from "@/components/resume/SaveStatusBar";
 import {
   getUserResumes,
   getResumeById,
   getCoverLetterById,
+  getJobPosting,
 } from "@/lib/api-services";
-import { useCoverLetterStore, useAccountStore } from "@/stores";
+import { useCoverLetterStore } from "@/stores";
+import { COVER_LETTERS_QUERY_KEY } from "@/hooks/useDocuments";
+import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
+import { useAiCredits } from "@/hooks/useAiCredits";
+import { AiCreditHint } from "@/components/ui/AiCreditHint";
+import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon } from "@radix-ui/react-icons";
+import {
+  ChevronDownIcon,
+  CounterClockwiseClockIcon,
+} from "@radix-ui/react-icons";
+import type { CoverLetterContent } from "@/types/cover-letter";
+
+const TONE_LIST = [
+  { tone: "Professional" as const },
+  { tone: "Friendly" as const },
+  { tone: "Enthusiastic" as const },
+  { tone: "Formal" as const },
+];
 
 function CoverLetterPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const initialCoverLetterId = Number(searchParams.get("id")) || null;
+  const initialCoverLetterId = searchParams.get("id") || null;
 
   const [resumeTitle, setResumeTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -27,12 +47,18 @@ function CoverLetterPageContent() {
   const [isDirty, setIsDirty] = useState(false);
   const [resumeList, setResumeList] = useState<
     {
-      id: number | null;
-      jobId: number;
+      id: string | null;
+      jobId: string;
       title: string;
       modifiedDate: string | null;
     }[]
   >([]);
+  const [restoreSnapshot, setRestoreSnapshot] = useState<{
+    generatedContent: string;
+    paragraphs: string[];
+  } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const {
     resumeId,
@@ -43,113 +69,112 @@ function CoverLetterPageContent() {
     content,
     generatedContent,
     setGeneratedContent,
-    coverLetterId,
     setCoverLetterId,
   } = useCoverLetterStore();
 
-  const { user } = useAccountStore();
+  const { canAfford, showUpgradeCta, user } = useAiCredits();
 
-  // Helper to update content fields
-  const updateContentField = <K extends keyof typeof content>(
+  const updateContentField = <K extends keyof CoverLetterContent>(
     field: K,
-    value: (typeof content)[K],
+    value: CoverLetterContent[K],
   ) => {
     setIsDirty(true);
     setContent((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toneList = [
-    { tone: "Professional" as const },
-    { tone: "Friendly" as const },
-    { tone: "Enthusiastic" as const },
-    { tone: "Formal" as const },
-  ];
-
   const canGenerate = !!resumeId && content?.descriptive_prompt?.trim() !== "";
 
   useEffect(() => {
-    async function fetchResumes() {
-      try {
-        const response = await getUserResumes();
-        const list = response?.length
-          ? response.map((resume) => ({
-              id: resume.id || null,
-              jobId: resume.job_id,
-              title: resume.title || "Untitled Resume",
-              modifiedDate: resume.last_updated,
-            }))
-          : [];
-        setResumeList(list);
-        return list;
-      } catch (error) {
-        console.error("Failed to fetch resumes:", error);
-        return [];
-      }
+    if (saveStatus === "saving") return;
+
+    if (isDirty && content.paragraphs.length > 0) {
+      setSaveStatus("unsaved");
     }
+  }, [isDirty, content.paragraphs.length, saveStatus]);
 
+  useEffect(() => {
     async function loadData() {
-      const list = await fetchResumes();
+      const [list, coverLetterData] = await Promise.all([
+        getUserResumes().then((response) =>
+          (response ?? []).map((resume) => ({
+            id: resume.id || null,
+            jobId: resume.job_id,
+            title: resume.title || "Untitled Resume",
+            modifiedDate: resume.last_updated,
+          })),
+        ).catch(() => []),
+        initialCoverLetterId
+          ? getCoverLetterById(initialCoverLetterId).catch(() => null)
+          : Promise.resolve(null),
+      ]);
 
-      if (initialCoverLetterId) {
-        setCoverLetterId(Number(initialCoverLetterId));
-        try {
-          const data = await getCoverLetterById(initialCoverLetterId);
-          if (data) {
-            setTitle(data.title);
-            const matchedResume = list.find(
-              (r: { jobId: number }) => r.jobId === data.job_id,
-            );
-            if (matchedResume) {
-              setResumeId(Number(matchedResume.id));
-              setResumeTitle(matchedResume.title);
-            }
-            setJobId(data.job_id);
-            setContent(data.content);
-            const generatedText = data.content.paragraphs.join("\n\n");
-            setGeneratedContent(generatedText);
-            setIsEditing(true);
-          }
-        } catch (error) {
-          console.error("Failed to fetch cover letter:", error);
+      setResumeList(list);
+
+      if (coverLetterData) {
+        setCoverLetterId(initialCoverLetterId!);
+        setTitle(coverLetterData.title);
+        const savedResumeId = coverLetterData.content.resume_id;
+        const matchedResume = savedResumeId
+          ? list.find((r) => r.id === savedResumeId)
+          : list.find((r) => r.jobId === coverLetterData.job_id);
+        if (matchedResume) {
+          setResumeId(matchedResume.id);
+          setResumeTitle(matchedResume.title);
+        }
+        setJobId(coverLetterData.job_id);
+        setContent(coverLetterData.content);
+        setGeneratedContent(coverLetterData.content.paragraphs.join("\n\n"));
+        setIsEditing(true);
+        setIsDirty(false);
+        if (coverLetterData.last_updated) {
+          setLastSavedAt(new Date(coverLetterData.last_updated));
+          setSaveStatus("saved");
         }
       }
     }
 
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coverLetterId]);
+  }, [initialCoverLetterId]);
 
-  // Handle resume selection
   const handleResumeSelect = async (resume: {
-    id: number;
-    jobId: number;
+    id: string | null;
+    jobId: string;
     title: string;
   }) => {
     setResumeTitle(resume.title);
     setResumeId(resume.id);
     setJobId(resume.jobId);
+    setContent((prev) => ({ ...prev, resume_id: resume.id }));
   };
 
-  // Stream AI-generated cover letter
   const handleGenerate = async () => {
     if (!resumeId || !content?.descriptive_prompt?.trim()) {
       toast.error("Please select a resume and provide a descriptive prompt");
       return;
     }
 
+    const state = useCoverLetterStore.getState();
+    if (
+      state.generatedContent.trim() !== "" ||
+      state.content.paragraphs.length > 0
+    ) {
+      setRestoreSnapshot({
+        generatedContent: state.generatedContent,
+        paragraphs: [...state.content.paragraphs],
+      });
+    }
+
     setIsGenerating(true);
     setGeneratedContent("");
     setIsEditing(false);
 
-    // Set title before generation for auto-save
     const coverLetterTitle = `${content.company || "Cover Letter"} - ${content.position || "Position"}`;
     setTitle(coverLetterTitle);
 
     try {
-      // Fetch resume data client-side to pass to API
       const resumeData = await getResumeById(resumeId);
 
-      // Fetch job posting keywords if available
       let keywords: string[] = [];
       let jobDescription = "";
       let jobCompany = "";
@@ -157,20 +182,19 @@ function CoverLetterPageContent() {
 
       if (resumeData.job_id) {
         try {
-          const { getJobPosting } = await import("@/lib/api-services");
           const jobPosting = await getJobPosting(resumeData.job_id);
-
           keywords = jobPosting?.selected_requirements || [];
           jobDescription = jobPosting?.description || "";
-          jobCompany = jobPosting?.company_name || "";
+          jobCompany = jobPosting?.company?.name || "";
           jobPosition = jobPosting?.title || "";
         } catch {
-          // Job posting not found or failed to fetch
+          // Job posting not found or failed to fetch — proceed without keywords
         }
       }
 
       const response = await fetch("/api/generate-cover-letter", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resumeData,
@@ -185,13 +209,13 @@ function CoverLetterPageContent() {
           userPrompt: content?.descriptive_prompt || "",
           closing: content?.closing_signature || "Your Name",
           personalInfo: {
-            firstName: user.first_name,
-            lastName: user.last_name,
-            email: user.email,
-            phone: user.phone,
-            location: user.location,
-            linkedin: user.linkedin,
-            github: user.github,
+            firstName: user?.first_name ?? "",
+            lastName: user?.last_name ?? "",
+            email: user?.email ?? "",
+            phone: user?.phone ?? "",
+            location: user?.location ?? "",
+            linkedin: user?.linkedin ?? "",
+            github: user?.github ?? "",
           },
         }),
       });
@@ -211,13 +235,10 @@ function CoverLetterPageContent() {
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-
-          const lines = chunk.split("\n");
-          for (const line of lines) {
+          for (const line of chunk.split("\n")) {
             if (line.trim().startsWith("0:")) {
               try {
-                const jsonStr = line.substring(2);
-                const parsed = JSON.parse(jsonStr);
+                const parsed = JSON.parse(line.substring(2));
                 if (parsed.text) {
                   fullText += parsed.text;
                   setGeneratedContent(fullText);
@@ -230,79 +251,57 @@ function CoverLetterPageContent() {
         }
       }
 
-      // Split by double newlines to create paragraphs
       const paragraphs = fullText
         .split("\n\n")
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 
-      // TEST:
-      // const test = [
-      //   "[Your Address]  \n[City, State, Zip]  \n[Email Address]  \n[Phone Number]  \n[Date]",
-      //   "Hiring Manager  \n[Company Name]  \n[Company Address]  \n[City, State, Zip]",
-      //   "Dear Hiring Manager,",
-      //   "I am writing to express my interest in the Senior Software Engineer position at [Company Name], as advertised. With a Bachelor of Science in Computer Science from the University of Calgary and relevant experience in software development, I am confident in my ability to contribute effectively to your team. My background includes solid foundational knowledge in programming, particularly within Python, as well as exposure to essential technologies such as AWS and Docker.",
-      //   "During my tenure as a Software Engineer Intern at the University of Calgary, I was responsible for designing and implementing a comprehensive coding curriculum that enabled secondary school students to grasp complex programming concepts in languages including Python. This experience not only honed my technical skills but also reinforced my ability to communicate effectively with diverse audiences—a crucial competency for any collaborative engineering team.",
-      //   "Moreover, my academic projects have provided me with a robust understanding of software development methodologies, including hands-on experience with Docker. I appreciate the importance of containerization in modern software engineering, especially within cloud environments like AWS. I am eager to apply my knowledge of these technologies to develop scalable and efficient solutions that align with [Company Name]'s strategic goals.",
-      //   "I am particularly drawn to [Company Name] due to its commitment to innovation and excellence in the tech industry. I am enthusiastic about the opportunity to bring my unique expertise to your esteemed organization and contribute to projects that drive impactful results.",
-      //   "Thank you for considering my application. I look forward to the possibility of discussing how my skills and experiences align with the needs of your team.",
-      //   "Sincerely,  \nYour Name",
-      // ];
-
-      // // Update store with generated content (preserve other content fields)
       setContent((prev) => ({ ...prev, paragraphs: paragraphs }));
-
       toast.success("Cover letter generated successfully!");
       setIsEditing(true);
       setIsDirty(true);
+      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     } catch (error) {
-      console.error("Generation error:", error);
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate cover letter",
+        error instanceof Error ? error.message : "Failed to generate cover letter",
       );
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Debounced auto-save
-  const debouncedSave = useDebouncedCallback(async () => {
+  const saveCoverLetterNow = useCallback(async () => {
     const state = useCoverLetterStore.getState();
 
-    if (!state.jobId || state.content.paragraphs.length === 0) {
-      return;
-    }
+    if (!state.jobId || state.content.paragraphs.length === 0) return;
+    if (!state.title || state.title.trim() === "") return;
 
-    if (!state.title || state.title.trim() === "") {
-      return;
-    }
-
-    const toastId = "cover-letter-auto-save";
-    toast.loading("Saving cover letter...", { id: toastId });
+    setSaveStatus("saving");
 
     try {
       const response = await state.saveCoverLetter();
       if (response?.success) {
-        toast.success("Saved", { id: toastId, duration: 1500 });
-      } else {
-        toast.error("Failed to save", { id: toastId });
+        const savedAt = new Date();
+        setLastSavedAt(savedAt);
+        setSaveStatus("saved");
+        setIsDirty(false);
+        queryClient.invalidateQueries({ queryKey: COVER_LETTERS_QUERY_KEY });
+        return;
       }
-    } catch (error) {
-      console.error("Auto-save failed:", error);
-      toast.error("Failed to save", { id: toastId });
+      setSaveStatus("error");
+    } catch {
+      setSaveStatus("error");
     }
-  }, 2000);
+  }, [queryClient]);
 
-  // Trigger auto-save when content changes (only if user has made modifications)
+  const debouncedSave = useDebouncedCallback(saveCoverLetterNow, 2000);
+
   useEffect(() => {
     if (isDirty && content.paragraphs.length > 0) {
       debouncedSave();
     }
   }, [content, isDirty, debouncedSave]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       debouncedSave.flush();
@@ -310,7 +309,6 @@ function CoverLetterPageContent() {
     };
   }, [debouncedSave]);
 
-  // Handle manual editing of generated content
   const handleEditContent = (newText: string) => {
     setIsDirty(true);
     setGeneratedContent(newText);
@@ -321,17 +319,40 @@ function CoverLetterPageContent() {
     setContent((prev) => ({ ...prev, paragraphs }));
   };
 
+  const handleRestoreCoverLetter = () => {
+    if (!restoreSnapshot) return;
+    setGeneratedContent(restoreSnapshot.generatedContent);
+    setContent((prev) => ({
+      ...prev,
+      paragraphs: restoreSnapshot.paragraphs,
+    }));
+    setIsEditing(restoreSnapshot.generatedContent.trim() !== "");
+    setIsDirty(true);
+    setRestoreSnapshot(null);
+    toast.success("Cover letter restored");
+  };
+
   return (
     <div className="overflow-auto px-4 py-6 md:px-6 md:py-10">
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-6 space-y-2">
-          <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
-            Cover Letter
-          </h1>
-          <p className="text-sm text-gray-600 md:text-base">
-            Generate AI-powered cover letters tailored to your resume and job
-            application. Preview updates in real-time.
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
+                Cover Letter
+              </h1>
+              <p className="text-sm text-gray-600 md:text-base">
+                Generate AI-powered cover letters tailored to your resume and job
+                application. Preview updates in real-time.
+              </p>
+            </div>
+            <SaveStatusBar
+              status={saveStatus}
+              lastSavedAt={lastSavedAt}
+              onRetry={saveStatus === "error" ? () => void saveCoverLetterNow() : undefined}
+              className="sm:pt-2"
+            />
+          </div>
         </div>
         <div className="flex min-h-screen flex-col bg-gray-50">
           <main className="flex w-full flex-1 justify-center">
@@ -386,7 +407,7 @@ function CoverLetterPageContent() {
                               <ChevronDownIcon className="ml-2 h-4 w-4" />
                             </Button>
                           }
-                          items={toneList.map((r) => ({
+                          items={TONE_LIST.map((r) => ({
                             label: r.tone,
                             value: r.tone,
                             onClick: () => updateContentField("tone", r.tone),
@@ -415,7 +436,7 @@ function CoverLetterPageContent() {
                               value: r.title,
                               onClick: () =>
                                 handleResumeSelect({
-                                  id: r.id as number,
+                                  id: r.id,
                                   jobId: r.jobId,
                                   title: r.title,
                                 }),
@@ -465,11 +486,25 @@ function CoverLetterPageContent() {
                         variant="primary"
                         onClick={handleGenerate}
                         className="w-full sm:w-auto"
-                        disabled={isGenerating || !canGenerate}
+                        disabled={
+                          isGenerating ||
+                          !canGenerate ||
+                          !canAfford("cover_letter")
+                        }
                       >
-                        {isGenerating ? "Generating..." : "Generate with AI"}
+                        {isGenerating ? (
+                          "Generating..."
+                        ) : (
+                          <>
+                            Generate with AI
+                            <AiCreditHint action="cover_letter" />
+                          </>
+                        )}
                       </Button>
                     </div>
+                    {showUpgradeCta("cover_letter") && canGenerate && (
+                      <UpgradeProCta action="cover_letter" />
+                    )}
                   </div>
                 </section>
 
@@ -502,14 +537,25 @@ function CoverLetterPageContent() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex gap-3">
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {restoreSnapshot && (
+                      <Button
+                        variant="outline"
+                        onClick={handleRestoreCoverLetter}
+                        className="flex w-full items-center justify-center gap-2 sm:flex-1"
+                        disabled={isGenerating}
+                      >
+                        <CounterClockwiseClockIcon />
+                        Restore
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       onClick={() => {
                         navigator.clipboard?.writeText(generatedContent);
                         toast.success("Copied to clipboard!");
                       }}
-                      className="w-full"
+                      className="w-full sm:flex-1"
                       disabled={!generatedContent}
                     >
                       Copy
@@ -528,7 +574,7 @@ function CoverLetterPageContent() {
                         URL.revokeObjectURL(url);
                         document.body.removeChild(a);
                       }}
-                      className="w-full"
+                      className="w-full sm:flex-1"
                       disabled={!generatedContent}
                     >
                       Download

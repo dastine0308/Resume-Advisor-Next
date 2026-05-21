@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/next";
+import { AuthProvider } from "@/app/providers/AuthProvider";
+import { QueryProvider } from "@/app/providers/QueryProvider";
 
 import "./globals.css";
 
@@ -26,13 +28,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
-        <Toaster position="top-center" richColors />
-        <div className="flex h-screen w-screen flex-col">{children}</div>
-        <Analytics />
+        <QueryProvider>
+          <AuthProvider>
+            <Toaster position="top-center" richColors />
+            <div className="flex h-screen w-screen flex-col">{children}</div>
+            <Analytics />
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

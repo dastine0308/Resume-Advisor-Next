@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth-helper";
+import {
+  getLatexServiceUrl,
+  MAX_LATEX_BODY_BYTES,
+} from "@/lib/latex-service-url";
 
-const LATEX_SERVICE_URL =
-  process.env.LATEX_SERVICE_URL || "http://localhost:80";
+const LATEX_SERVICE_URL = getLatexServiceUrl();
 
 /**
  * Server-side LaTeX compilation API
@@ -12,6 +16,9 @@ const LATEX_SERVICE_URL =
  * Returns: PDF file
  */
 export async function POST(request: NextRequest) {
+  const { error: authError } = await getAuthUser();
+  if (authError) return authError;
+
   const startTime = Date.now();
 
   try {
@@ -33,7 +40,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { latex } = body;
 
-    if (!latex) {
+    if (typeof latex !== "string") {
+      return NextResponse.json(
+        {
+          error: "LaTeX content is required",
+          message: "Please provide LaTeX content to compile",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (Buffer.byteLength(latex, "utf8") > MAX_LATEX_BODY_BYTES) {
+      return NextResponse.json(
+        {
+          error: "LaTeX document too large",
+          message: "Document exceeds the maximum allowed size.",
+        },
+        { status: 413 },
+      );
+    }
+
+    if (!latex.trim()) {
       console.error("[LaTeX API] Missing LaTeX content in request");
       return NextResponse.json(
         {

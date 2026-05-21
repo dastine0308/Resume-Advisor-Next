@@ -15,51 +15,22 @@ import type {
   CreateUpdateCoverLetterResponse,
 } from "@/types/cover-letter";
 
-/**
- * Auth API Services
- */
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  success: boolean;
-  token: string;
-  user_id: number;
-}
-
-export interface SignupRequest {
-  email: string;
-  password: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  location?: string;
-  linkedin_profile_url?: string;
-  github_profile_url?: string;
-}
-
-export interface SignupResponse {
-  success: boolean;
-  message?: string;
-  user?: User;
-}
-
-/**
- * Login user
- * Note: This is called from NextAuth authorize function
- */
-export async function login(credentials: LoginRequest): Promise<LoginResponse> {
-  return api.post<LoginResponse>("/auth/login", credentials);
-}
-
-/**
- * Register new user
- */
-export async function signup(data: SignupRequest): Promise<SignupResponse> {
-  return api.post<SignupResponse>("/auth/signup", data);
+export interface JobPostingResponse {
+  id: string;
+  title: string;
+  description?: string;
+  job_location: string;
+  posted_date?: string;
+  close_date?: string;
+  company?: {
+    id: string;
+    name: string;
+    location?: string;
+    industry?: string;
+    website?: string;
+  };
+  requirements?: string[];
+  selected_requirements?: string[];
 }
 
 /**
@@ -75,18 +46,13 @@ export interface UserUpdateRequest {
   location?: string;
 }
 
-/**
- * Get current user data
- */
 export async function getUserData(): Promise<User> {
-  return api.get<User>("/user");
+  const res = await api.get<{ success: boolean; data: User }>("/user");
+  return res.data;
 }
 
-/**
- * Update user profile
- */
-export async function updateUserData(data: UserUpdateRequest): Promise<User> {
-  return api.put<User>("/user", data);
+export async function updateUserData(data: UserUpdateRequest): Promise<void> {
+  await api.put<{ success: boolean }>("/user", data);
 }
 
 /**
@@ -94,6 +60,14 @@ export async function updateUserData(data: UserUpdateRequest): Promise<User> {
  */
 export async function deleteUser(): Promise<{ success: boolean }> {
   return api.delete<{ success: boolean }>("/user");
+}
+
+export async function createStripeCheckout(): Promise<{ url: string }> {
+  return api.post<{ url: string }>("/stripe/checkout");
+}
+
+export async function createStripePortal(): Promise<{ url: string }> {
+  return api.post<{ url: string }>("/stripe/portal");
 }
 
 /**
@@ -119,8 +93,8 @@ export interface ResumeSection {
 }
 
 export interface ResumesResponse {
-  id: number;
-  job_id: number;
+  id: string;
+  job_id: string;
   last_updated: string;
   title: string;
 }
@@ -129,19 +103,24 @@ export interface ResumesResponse {
  * Get all resumes for the current user
  */
 export async function getUserResumes(): Promise<ResumesResponse[]> {
-  return api.get<ResumesResponse[]>("/user/resumes");
+  const res = await api.get<{ success: boolean; data: ResumesResponse[] }>("/user/resumes");
+  return res.data;
 }
 
 export interface ResumeCreateUpdateRequest {
-  id?: number;
-  job_id: number;
+  id?: string;
+  job_id: string;
   sections: ResumeDataSection;
   title: string;
+  version_source?: "manual" | "autosave";
+  version_label?: string;
 }
 
 export interface ResumeCreateUpdateResponse {
-  resume_id: number;
+  resume_id: string;
   success: boolean;
+  version_created?: boolean;
+  version_error?: string | null;
 }
 
 export interface ResumeDataSection {
@@ -155,8 +134,8 @@ export interface ResumeDataSection {
 
 export interface ResumeDataResponse {
   creation_date: string;
-  id: number;
-  job_id: number;
+  id: string;
+  job_id: string;
   last_updated: string;
   sections: ResumeDataSection;
   title: string;
@@ -174,15 +153,56 @@ export async function createOrUpdateResume(
 /**
  * Get a specific resume by ID
  */
-export async function getResumeById(id: number): Promise<ResumeDataResponse> {
-  return api.get<ResumeDataResponse>(`/resumes/${id}`);
+export async function getResumeById(id: string): Promise<ResumeDataResponse> {
+  const res = await api.get<{ success: boolean; data: ResumeDataResponse }>(`/resumes/${id}`);
+  return res.data;
 }
 
 /**
  * Delete a specific resume by ID
  */
-export async function deleteResume(id: number): Promise<{ success: boolean }> {
+export async function deleteResume(id: string): Promise<{ success: boolean }> {
   return api.delete<{ success: boolean }>(`/resumes/${id}`);
+}
+
+export interface ResumeVersionListItem {
+  id: string;
+  title: string;
+  source: "autosave" | "manual" | "restore";
+  created_at: string;
+  label: string | null;
+  change_summary: string | null;
+}
+
+export interface RestoreResumeVersionResponse {
+  success: boolean;
+  data: {
+    title: string;
+    sections: ResumeDataSection;
+  };
+  message: string;
+}
+
+/**
+ * List saved versions for a resume (metadata only)
+ */
+export async function getResumeVersions(resumeId: string): Promise<ResumeVersionListItem[]> {
+  const res = await api.get<{ success: boolean; data: ResumeVersionListItem[] }>(
+    `/resumes/${resumeId}/versions`,
+  );
+  return res.data;
+}
+
+/**
+ * Restore a resume to a previous version
+ */
+export async function restoreResumeVersion(
+  resumeId: string,
+  versionId: string,
+): Promise<RestoreResumeVersionResponse> {
+  return api.post<RestoreResumeVersionResponse>(
+    `/resumes/${resumeId}/versions/${versionId}/restore`,
+  );
 }
 
 /**
@@ -190,7 +210,7 @@ export async function deleteResume(id: number): Promise<{ success: boolean }> {
  */
 
 export interface createOrUpdateJobPostingResponse {
-  job_id: number;
+  job_id: string;
   message: string;
   success: boolean;
 }
@@ -207,15 +227,16 @@ export async function createOrUpdateJobPosting(
 /**
  * Get details of a job posting by ID
  */
-export async function getJobPosting(id: number): Promise<JobPosting> {
-  return api.get<JobPosting>(`/job-postings/${id}`);
+export async function getJobPosting(id: string): Promise<JobPostingResponse> {
+  const res = await api.get<{ success: boolean; data: JobPostingResponse }>(`/job-postings/${id}`);
+  return res.data;
 }
 
 /**
  * Analyze a job description and extract structured keywords
  */
-export async function analyzeJobDescription(data: string): Promise<JobPosting> {
-  return api.post<JobPosting>("/ai/analyze-job", data);
+export async function analyzeJobDescription(jobDescription: string): Promise<JobPosting> {
+  return api.post<JobPosting>("/ai/analyze-job", { job_description: jobDescription }, { timeout: 60000 });
 }
 
 /**
@@ -226,14 +247,16 @@ export async function analyzeJobDescription(data: string): Promise<JobPosting> {
  * Get all cover letters for the current user
  */
 export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
-  return api.get<CoverLetterListItem[]>("/user/coverletters");
+  const res = await api.get<{ success: boolean; data: CoverLetterListItem[] }>("/user/cover-letters");
+  return res.data;
 }
 
 /**
  * Get a specific cover letter by ID
  */
-export async function getCoverLetterById(id: number): Promise<CoverLetter> {
-  return api.get<CoverLetter>(`/cover-letters/${id}`);
+export async function getCoverLetterById(id: string): Promise<CoverLetter> {
+  const res = await api.get<{ success: boolean; data: CoverLetter }>(`/cover-letters/${id}`);
+  return res.data;
 }
 
 /**
@@ -249,7 +272,7 @@ export async function createOrUpdateCoverLetter(
  * Delete a specific cover letter by ID
  */
 export async function deleteCoverLetter(
-  id: number,
+  id: string,
 ): Promise<{ success: boolean; message: string }> {
   return api.delete<{ success: boolean; message: string }>(
     `/cover-letters/${id}`,

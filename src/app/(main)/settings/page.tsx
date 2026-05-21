@@ -1,18 +1,29 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
-import { useAccountStore } from "@/stores";
-import { useRouter } from "next/navigation";
+import {
+  useProfile,
+  useUpdateProfile,
+  PROFILE_QUERY_KEY,
+} from "@/hooks/useProfile";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { profileSchema } from "@/lib/utils";
+import { PLAN_ALLOWANCES } from "@/lib/ai-credits";
+import { createStripePortal, getUserData } from "@/lib/api-services";
+import type { UserPlan, User } from "@/types/user";
+import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
 
-export default function AccountSettingPage() {
+function AccountSettingPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -23,8 +34,8 @@ export default function AccountSettingPage() {
     location: "",
   });
 
-  const userData = useAccountStore((state) => state.user);
-  const setUserData = useAccountStore((state) => state.setUser);
+  const { data: userData } = useProfile();
+  const { mutateAsync: updateProfile, isPending } = useUpdateProfile();
 
   const handleChange =
     (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,28 +43,11 @@ export default function AccountSettingPage() {
     };
 
   const handleCancel = () => {
-    // Reset user data to original values or perform any cancel logic
-    setFormData({
-      first_name: userData.first_name || "",
-      last_name: userData.last_name || "",
-      phone: userData.phone || "",
-      linkedin: userData.linkedin || "",
-      github: userData.github || "",
-      location: userData.location || "",
-    });
-
     router.push("/dashboard");
   };
 
-  const updateUser = async (userData: typeof formData) => {
-    const { updateUserData } = await import("@/lib/api-services");
-    return updateUserData(userData);
-  };
-
   const handleUpdate = async () => {
-    // Validate form data
     const result = profileSchema.safeParse(formData);
-    console.log("Validation result:", result);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
       result.error.errors.forEach((err) => {
@@ -65,48 +59,98 @@ export default function AccountSettingPage() {
       return;
     }
 
-    // If validation passes, clear errors and proceed to save
     setErrors({});
-    setIsSaving(true);
     try {
-      await updateUser({
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        phone: formData.phone,
-        linkedin: formData.linkedin,
-        github: formData.github,
-        location: formData.location,
-      });
+      await updateProfile(formData);
       toast.success("Profile updated successfully");
-      setUserData({
-        ...userData,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        phone: formData.phone,
-        linkedin: formData.linkedin,
-        github: formData.github,
-        location: formData.location,
-      });
       router.push("/dashboard");
-    } catch (error) {
-      console.error("Error updating profile:", error);
+    } catch {
       toast.error("Failed to update profile");
-    } finally {
-      setIsSaving(false);
     }
   };
 
   useEffect(() => {
-    // Initialize form data from user data
-    setFormData({
-      first_name: userData.first_name || "",
-      last_name: userData.last_name || "",
-      phone: userData.phone || "",
-      linkedin: userData.linkedin || "",
-      github: userData.github || "",
-      location: userData.location || "",
-    });
+    if (userData) {
+      setFormData({
+        first_name: userData.first_name || "",
+        last_name: userData.last_name || "",
+        phone: userData.phone || "",
+        linkedin: userData.linkedin || "",
+        github: userData.github || "",
+        location: userData.location || "",
+      });
+    }
   }, [userData]);
+
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    if (!checkout) return;
+
+    router.replace("/settings#ai-plan");
+
+    if (checkout === "cancel") {
+      toast.info("Checkout was cancelled.");
+      return;
+    }
+
+    if (checkout !== "success") return;
+
+    let cancelled = false;
+
+    const pollForProPlan = async () => {
+      const maxAttempts = 15;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (cancelled) return;
+
+        await queryClient.fetchQuery({
+          queryKey: PROFILE_QUERY_KEY,
+          queryFn: getUserData,
+        });
+
+        const profile = queryClient.getQueryData<User>(PROFILE_QUERY_KEY);
+        if (profile?.plan === "pro") {
+          toast.success("Welcome to Pro! Your AI credits have been updated.");
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      toast.info(
+        "Payment received. Your Pro plan should activate shortly — refresh if credits do not update.",
+      );
+    };
+
+    void pollForProPlan();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, queryClient, router]);
+
+  const handleManageBilling = async () => {
+    setPortalLoading(true);
+    try {
+      const { url } = await createStripePortal();
+      window.location.href = url;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not open billing portal",
+      );
+      setPortalLoading(false);
+    }
+  };
+
+  const plan = (userData?.plan ?? "free") as UserPlan;
+  const allowance = PLAN_ALLOWANCES[plan];
+  const creditsRemaining = userData?.ai_credits_balance ?? allowance;
+  const resetDate = userData?.credits_period_end
+    ? new Date(userData.credits_period_end).toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div className="overflow-auto px-4 py-6 md:px-6 md:py-10">
@@ -118,8 +162,7 @@ export default function AccountSettingPage() {
             </h1>
             <p className="text-sm text-gray-600 md:text-base">
               {userData?.email
-                ? `You're now signing
-            up as ${userData.email}.`
+                ? `You're now signing up as ${userData.email}.`
                 : "Manage your profile settings."}
             </p>
           </div>
@@ -127,11 +170,11 @@ export default function AccountSettingPage() {
             <Button
               onClick={handleCancel}
               variant="outline"
-              disabled={isSaving}
+              disabled={isPending}
             >
               Cancel
             </Button>
-            <Button onClick={handleUpdate} disabled={isSaving}>
+            <Button onClick={handleUpdate} disabled={isPending}>
               Update
             </Button>
           </div>
@@ -144,9 +187,9 @@ export default function AccountSettingPage() {
               <Input
                 label="First Name"
                 variant="horizontal"
-                id="name"
+                id="first_name"
                 type="text"
-                name="name"
+                name="first_name"
                 value={formData.first_name}
                 onChange={handleChange("first_name")}
                 placeholder="Enter your first name"
@@ -162,9 +205,9 @@ export default function AccountSettingPage() {
               <Input
                 label="Last Name"
                 variant="horizontal"
-                id="name"
+                id="last_name"
                 type="text"
-                name="name"
+                name="last_name"
                 value={formData.last_name}
                 onChange={handleChange("last_name")}
                 placeholder="Enter your name"
@@ -190,7 +233,7 @@ export default function AccountSettingPage() {
                 className="w-full md:w-64"
               />
               {errors.phone && (
-                <p className="mt-0 text-sm text-red-500">{errors.phone}</p>
+                <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
               )}
             </div>
             <div className="flex flex-col">
@@ -255,15 +298,60 @@ export default function AccountSettingPage() {
             </div>
           </div>
         </div>
+        <div className="mt-8" id="ai-plan">
+          <h2 className="text-lg font-semibold">AI Plan</h2>
+          <hr className="my-[12px]" />
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 md:p-6">
+            <div className="flex flex-col gap-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-900">
+                  Current plan:{" "}
+                  <span className="capitalize text-indigo-600">{plan}</span>
+                </p>
+                <p className="text-sm text-gray-600">
+                  {creditsRemaining} of {allowance} AI credits remaining this
+                  month
+                </p>
+                {resetDate && (
+                  <p className="text-sm text-gray-500">Resets on {resetDate}</p>
+                )}
+              </div>
+              {plan === "free" && (
+                <UpgradeProCta
+                  variant="settings"
+                  creditsExhausted={creditsRemaining <= 0}
+                />
+              )}
+              {plan === "pro" && (
+                <Button
+                  variant="outline"
+                  className="w-fit"
+                  disabled={portalLoading}
+                  onClick={handleManageBilling}
+                >
+                  {portalLoading ? "Opening…" : "Manage subscription"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
       <div className="mt-5 flex flex-col gap-2 md:hidden">
-        <Button onClick={handleCancel} variant="outline" disabled={isSaving}>
+        <Button onClick={handleCancel} variant="outline" disabled={isPending}>
           Cancel
         </Button>
-        <Button onClick={handleUpdate} disabled={isSaving}>
+        <Button onClick={handleUpdate} disabled={isPending}>
           Update
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function AccountSettingPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+      <AccountSettingPageContent />
+    </Suspense>
   );
 }
