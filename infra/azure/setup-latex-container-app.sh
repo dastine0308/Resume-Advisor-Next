@@ -131,7 +131,7 @@ az containerapp update \
   --scale-rule-name http-concurrent \
   --scale-rule-type http \
   --scale-rule-http-concurrency "$HTTP_CONCURRENT_REQUESTS" \
-  --scale-rule-auth false) || {
+  --scale-rule-auth false || {
     echo "WARN: Could not apply probe/scaling via CLI flags. Configure in Azure Portal if needed." >&2
   }
 
