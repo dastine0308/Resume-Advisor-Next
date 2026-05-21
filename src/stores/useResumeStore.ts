@@ -7,17 +7,16 @@ import {
   type ResumeCreateUpdateRequest,
   type ResumeCreateUpdateResponse,
 } from "@/lib/api-services";
-import { useAccountStore } from "@/stores/useAccountStore";
 
 interface ResumeStore {
-  resumeId: number | null;
-  setResumeId: (id: number | null) => void;
+  resumeId: string | null;
+  setResumeId: (id: string | null) => void;
 
   resumeTitle: string;
   setResumeTitle: (title: string, markDirty?: boolean) => void;
 
-  jobId: number | null;
-  setJobId: (id: number | null) => void;
+  jobId: string | null;
+  setJobId: (id: string | null) => void;
 
   resumeData: ResumeData;
   setResumeData: (
@@ -25,7 +24,6 @@ interface ResumeStore {
     markDirty?: boolean,
   ) => void;
 
-  // Track if user has made modifications (for auto-save)
   isDirty: boolean;
   setIsDirty: (v: boolean) => void;
 
@@ -49,42 +47,27 @@ interface ResumeStore {
   isPdfGenerating: boolean;
   setIsPdfGenerating: (v: boolean) => void;
 
-  // Save resume to API
   isSaving: boolean;
   isCreating: boolean; // Lock to prevent multiple create requests
   saveError: string | null;
-  saveResume: () => Promise<ResumeCreateUpdateResponse | null>;
+  saveResume: (options?: {
+    force?: boolean;
+    versionSource?: "manual" | "autosave";
+    versionLabel?: string;
+  }) => Promise<ResumeCreateUpdateResponse | null>;
 
-  // Reset the store to initial state
   resetStore: () => void;
 }
 
-export const useResumeStore = create<ResumeStore>()(
-  persist(
-    (set, get) => ({
-  resumeId: null,
-  setResumeId: (id) => set({ resumeId: id }),
-
-  resumeTitle: "",
-  setResumeTitle: (title, markDirty = true) =>
-    set({ resumeTitle: title, ...(markDirty && { isDirty: true }) }),
-
-  jobId: null,
-  setJobId: (id) => set({ jobId: id }),
-
-  isDirty: false,
-  setIsDirty: (v) => set({ isDirty: v }),
-
-  currentStep: 1,
-  setCurrentStep: (step) => set({ currentStep: step }),
-
-  resumeData: {
+function makeInitialResumeData(): ResumeData {
+  return {
     personalInfo: {
       name: "",
       email: "",
       phone: "",
       linkedin: "",
       github: "",
+      address: "",
     },
     education: [
       {
@@ -137,7 +120,29 @@ export const useResumeStore = create<ResumeStore>()(
       developerTools: "",
       technologiesFrameworks: "",
     },
-  },
+  };
+}
+
+export const useResumeStore = create<ResumeStore>()(
+  persist(
+    (set, get) => ({
+  resumeId: null,
+  setResumeId: (id) => set({ resumeId: id }),
+
+  resumeTitle: "",
+  setResumeTitle: (title, markDirty = true) =>
+    set({ resumeTitle: title, ...(markDirty && { isDirty: true }) }),
+
+  jobId: null,
+  setJobId: (id) => set({ jobId: id }),
+
+  isDirty: false,
+  setIsDirty: (v) => set({ isDirty: v }),
+
+  currentStep: 1,
+  setCurrentStep: (step) => set({ currentStep: step }),
+
+  resumeData: makeInitialResumeData(),
 
   setResumeData: (d, markDirty = true) =>
     set((state) => ({
@@ -169,7 +174,7 @@ export const useResumeStore = create<ResumeStore>()(
   isSaving: false,
   isCreating: false,
   saveError: null,
-  saveResume: async () => {
+  saveResume: async (options) => {
     const state = get();
     const {
       resumeId,
@@ -181,37 +186,27 @@ export const useResumeStore = create<ResumeStore>()(
       isCreating,
     } = state;
 
-    // Prevent duplicate saves
-    if (isSaving) {
-      return null;
-    }
+    const force = options?.force ?? false;
+    const versionSource = options?.versionSource ?? "autosave";
+    const versionLabel = options?.versionLabel?.trim();
 
-    // Don't save if there are no changes
-    if (!isDirty) {
-      return null;
-    }
+    if (isSaving) return null;
+    if (!force && !isDirty) return null;
 
-    // If no resumeId exists and we're already creating one, wait for it to complete
-    // This prevents multiple POST requests creating duplicate resumes
     // Use explicit null check since resumeId could be 0 (which is falsy but valid)
-    if (resumeId === null && isCreating) {
-      return null;
-    }
+    if (resumeId === null && isCreating) return null;
 
     if (jobId === null) {
       set({ saveError: "Job ID is required to save resume" });
       return null;
     }
 
-    // Determine if this is a create or update operation
     // Use explicit null check since resumeId could be 0 (which is falsy but valid)
     const isCreateOperation = resumeId === null;
 
-    // Set flags before making the request
     set({
       isSaving: true,
       saveError: null,
-      isDirty: false,
       ...(isCreateOperation && { isCreating: true }),
     });
 
@@ -226,16 +221,18 @@ export const useResumeStore = create<ResumeStore>()(
         leadership: resumeData.leadership,
       },
       title: resumeTitle || "Untitled Resume",
+      version_source: versionSource,
+      ...(versionLabel ? { version_label: versionLabel } : {}),
     };
 
     try {
       const response = await createOrUpdateResume(request);
-      console.log("!!!!!!!!Saved resume:", response);
-      if (response.success && response.resume_id >= 0) {
+      if (response.success && response.resume_id) {
         set({
           resumeId: response.resume_id,
           isSaving: false,
           isCreating: false,
+          isDirty: false,
         });
       } else {
         set({ isSaving: false, isCreating: false });
@@ -261,64 +258,7 @@ export const useResumeStore = create<ResumeStore>()(
       resumeTitle: "",
       jobId: null,
       isDirty: false,
-      resumeData: {
-        personalInfo: {
-          ...useAccountStore.getState().user,
-          name: `${useAccountStore.getState().user.first_name} ${useAccountStore.getState().user.last_name}`.trim(),
-          address: useAccountStore.getState().user.location,
-        },
-        education: [
-          {
-            id: uuidv4(),
-            universityName: "",
-            degree: "",
-            location: "",
-            datesAttended: "",
-            coursework: "",
-            order: 0,
-            isCollapsed: false,
-          },
-        ],
-        experience: [
-          {
-            id: uuidv4(),
-            jobTitle: "",
-            company: "",
-            location: "",
-            dates: "",
-            description: "",
-            order: 0,
-            isCollapsed: false,
-          },
-        ],
-        projects: [
-          {
-            id: uuidv4(),
-            projectName: "",
-            technologies: "",
-            date: "",
-            description: "",
-            order: 0,
-            isCollapsed: false,
-          },
-        ],
-        leadership: [
-          {
-            id: uuidv4(),
-            role: "",
-            organization: "",
-            dates: "",
-            description: "",
-            order: 0,
-            isCollapsed: false,
-          },
-        ],
-        technicalSkills: {
-          languages: "",
-          developerTools: "",
-          technologiesFrameworks: "",
-        },
-      },
+      resumeData: makeInitialResumeData(),
       currentStep: 1,
       latex: "",
       mode: "form",
@@ -333,6 +273,20 @@ export const useResumeStore = create<ResumeStore>()(
     }),
     {
       name: "resume-storage",
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { resumeData?: { education?: { location?: string; datesAttended?: string }[] } };
+        if (version === 0 && state.resumeData?.education) {
+          // Fix: generator/parser previously had location↔datesAttended swapped for education.
+          // Swap the values back so the data matches the correct field semantics.
+          state.resumeData.education = state.resumeData.education.map((edu) => ({
+            ...edu,
+            location: edu.datesAttended ?? "",
+            datesAttended: edu.location ?? "",
+          }));
+        }
+        return state;
+      },
       partialize: (state) => ({
         resumeId: state.resumeId,
         resumeTitle: state.resumeTitle,
@@ -346,10 +300,8 @@ export const useResumeStore = create<ResumeStore>()(
 
 export default useResumeStore;
 
-// Selector hooks: keep components subscribed only to the slice they need
-// This reduces re-renders when unrelated parts of the store change.
-// Use these in components to read only the required data instead of
-// subscribing to the entire store object.
+// Selector hooks for fine-grained subscriptions — prevents re-renders when
+// unrelated store slices change.
 export const useEducation = () => useResumeStore((s) => s.resumeData.education);
 
 export const useExperience = () =>

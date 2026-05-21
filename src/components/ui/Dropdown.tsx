@@ -6,18 +6,21 @@ export interface DropdownItem {
   label: string;
   value: string;
   onClick: () => void;
+  description?: string;
 }
 
 interface DropdownProps {
   trigger: React.ReactNode;
   items: DropdownItem[];
   disabled?: boolean;
+  menuClassName?: string;
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
   trigger,
   items,
   disabled,
+  menuClassName = "",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -46,17 +49,24 @@ export const Dropdown: React.FC<DropdownProps> = ({
       <div onClick={() => !disabled && setIsOpen(!isOpen)}>{trigger}</div>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-10 mt-1 min-w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+        <div
+          className={`absolute left-0 top-full z-10 mt-1 min-w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg ${menuClassName}`}
+        >
           {items.map((item) => (
             <div
               key={item.value}
-              className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              className="cursor-pointer px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100"
               onClick={() => {
                 setIsOpen(false);
                 item.onClick();
               }}
             >
-              {item.label}
+              <div className="font-medium text-gray-900">{item.label}</div>
+              {item.description && (
+                <div className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+                  {item.description}
+                </div>
+              )}
             </div>
           ))}
         </div>

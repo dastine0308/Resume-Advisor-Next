@@ -1,35 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ProgressBar } from "@/components/resume/ProgressBar";
-import { useSignupStore } from "@/stores/useSignupStore";
-import SignUpForm from "@/components/form/sign-up-form";
-import ProfileSetUpForm from "@/components/form/profile-set-up-form";
-import { useEffect } from "react";
-
-export default function SignUpLayout() {
-  const steps = [{ label: "Sign Up" }, { label: "Profile Setup" }];
-
-  const currentStep = useSignupStore((state) => state.currentStep);
-
-  useEffect(() => {
-    return () => {
-      useSignupStore.getState().resetSignupForm();
-      console.log("Signup form reset on unmount of SignUpLayout");
-    };
-  }, []);
-
-  return (
-    <div className="mx-auto w-full max-w-md px-4 py-6 lg:w-[500px]">
-      <ProgressBar
-        currentStep={currentStep}
-        totalSteps={2}
-        steps={steps}
-        className="rounded-t-xl shadow-md"
-      />
-      <div className="mx-auto">
-        {currentStep === 1 && <SignUpForm />}
-        {currentStep === 2 && <ProfileSetUpForm />}
-      </div>
-    </div>
-  );
+export default function SignUpPage() {
+  redirect("/login");
 }

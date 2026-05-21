@@ -68,6 +68,7 @@ export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
     // Use Next.js API route instead of direct service call
     const response = await fetch("/api/compile-latex", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },

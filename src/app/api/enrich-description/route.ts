@@ -1,11 +1,11 @@
-import { openai } from "@ai-sdk/openai";
-import { streamObject } from "ai";
-import { z } from "zod";
-
-// Schema for the enriched description response
-const enrichedDescriptionSchema = z.object({
-  enhanced_description: z.string(),
-});
+import { groq } from "@/lib/groq";
+import { getAuthUser } from "@/lib/auth-helper";
+import {
+  logAiUsage,
+  refundAiCredits,
+  requireAiCredits,
+} from "@/lib/ai-credits.server";
+import { streamText } from "ai";
 
 // Section-specific prompts
 const PROMPTS = {
@@ -27,6 +27,7 @@ ${keywords.length > 0 ? "4. Incorporate target keywords naturally and contextual
 7. Use past tense for previous roles
 8. Preserve the core facts and experiences from the user's description - enhance, don't fabricate
 9. IMPORTANT: Use only ASCII characters. Do not use special Unicode characters like smart quotes, em-dashes, or bullet symbols.
+10. Do NOT use LaTeX markup (no \\textbf{}, \\emph{}, or other backslash commands). Plain text only.
 
 Return ONLY the enhanced description in bullet point format using "-" for each bullet.`,
 
@@ -48,6 +49,7 @@ ${keywords.length > 0 ? "4. Incorporate target keywords and technologies natural
 7. Use past tense
 8. Preserve the core facts and technical details from the user's description - enhance, don't fabricate
 9. IMPORTANT: Use only ASCII characters. Do not use special Unicode characters like smart quotes, em-dashes, or bullet symbols.
+10. Do NOT use LaTeX markup (no \\textbf{}, \\emph{}, or other backslash commands). Plain text only.
 
 Return ONLY the enhanced description in bullet point format using "-" for each bullet.`,
 
@@ -69,11 +71,18 @@ ${keywords.length > 0 ? "4. Incorporate target keywords naturally - don't force 
 7. Use past tense for completed roles, present tense for current roles
 8. Preserve the core facts and leadership experiences from the user's description - enhance, don't fabricate
 9. IMPORTANT: Use only ASCII characters. Do not use special Unicode characters like smart quotes, em-dashes, or bullet symbols.
+10. Do NOT use LaTeX markup (no \\textbf{}, \\emph{}, or other backslash commands). Plain text only.
 
 Return ONLY the enhanced description in bullet point format using "-" for each bullet.`,
 };
 
 export async function POST(req: Request) {
+  const { user, supabase, error: authError } = await getAuthUser();
+  if (authError) return authError;
+
+  const credits = await requireAiCredits(supabase!, user!.id, "enrich");
+  if (!credits.ok) return credits.response;
+
   try {
     const body = await req.json();
     const { sectionType, description, keywords = [] } = body as {
@@ -82,8 +91,8 @@ export async function POST(req: Request) {
       keywords?: string[];
     };
 
-    // Validate required fields
     if (!["experience", "project", "leadership"].includes(sectionType)) {
+      await refundAiCredits(user!.id, credits.cost);
       return Response.json(
         { error: "Invalid section type" },
         { status: 400 },
@@ -91,41 +100,41 @@ export async function POST(req: Request) {
     }
 
     if (!description || description.trim() === "") {
+      await refundAiCredits(user!.id, credits.cost);
       return Response.json(
         { error: "Description is required and cannot be empty" },
         { status: 400 },
       );
     }
 
-    // Get the appropriate prompt
     const prompt = PROMPTS[sectionType](description, keywords);
 
-    console.log('[API] Enriching:', sectionType, 'with', keywords.length, 'keywords');
-    console.log('[API] Description length:', description.length);
-
-    // Stream the enhanced description
-    const result = streamObject({
-      model: openai("gpt-4o-mini"),
-      schema: enrichedDescriptionSchema,
-      prompt: prompt,
+    const result = streamText({
+      model: groq.chat("llama-3.3-70b-versatile"),
+      prompt,
       temperature: 0.7,
-      onFinish: ({ object }) => {
-        console.log('[API] Stream finished, enhanced_description length:', object?.enhanced_description?.length);
-      },
     });
 
-    // Create a custom streaming response that sends the partial objects
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const partialObject of result.partialObjectStream) {
-            const data = `0:${JSON.stringify(partialObject)}\n`;
+          for await (const chunk of result.textStream) {
+            const data = `0:${JSON.stringify({ text: chunk })}\n`;
             controller.enqueue(encoder.encode(data));
           }
+
+          const usage = await result.usage;
+          await logAiUsage(
+            user!.id,
+            "enrich",
+            credits.cost,
+            usage?.totalTokens,
+          );
           controller.close();
         } catch (error) {
-          console.error('[API] Stream error:', error);
+          await refundAiCredits(user!.id, credits.cost);
+          console.error("Stream error:", error);
           controller.error(error);
         }
       },
@@ -138,6 +147,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    await refundAiCredits(user!.id, credits.cost);
     console.error("Error enriching description:", error);
     return Response.json(
       { error: "Failed to enrich description" },

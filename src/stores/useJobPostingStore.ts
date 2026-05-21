@@ -61,7 +61,13 @@ export const useJobPostingStore = create<JobPostingStore>()(
       },
 
       saveJobPosting: async () => {
+        if (get().isAutoSaving) return null;
+
         const { jobPosting, selectedKeywords, jobDescription } = get();
+
+        // Only save after Analyze — avoids overwriting DB rows with placeholder
+        // defaults when jobId exists but structured jobPosting is not loaded yet.
+        if (!jobPosting) return null;
 
         const payload = {
           job_id: useResumeStore.getState().jobId || undefined,
@@ -83,6 +89,7 @@ export const useJobPostingStore = create<JobPostingStore>()(
         set({ isAutoSaving: true });
         try {
           const response = await createOrUpdateJobPosting(payload);
+          set({ isDirty: false });
           if (response?.job_id && !useResumeStore.getState().jobId) {
             useResumeStore.getState().setJobId(response.job_id);
           }
@@ -93,7 +100,12 @@ export const useJobPostingStore = create<JobPostingStore>()(
       },
     }),
     {
-      name: "job-posting-storage", // localStorage key
+      name: "job-posting-storage",
+      partialize: (state) => ({
+        jobDescription: state.jobDescription,
+        selectedKeywords: state.selectedKeywords,
+        jobPosting: state.jobPosting,
+      }),
     },
   ),
 );

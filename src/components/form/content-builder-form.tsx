@@ -19,6 +19,7 @@ import { DraggableSection } from "@/components/resume/DraggableSection";
 import { useJobPostingStore, useResumeStore } from "@/stores";
 import { Breadcrumb } from "@/components/resume/Breadcrumb";
 import { FormField } from "@/components/resume/FormField";
+import { VersionHistoryDropdown } from "@/components/resume/VersionHistoryDropdown";
 import { Button } from "@/components/ui/Button";
 import type {
   ResumeData,
@@ -37,12 +38,39 @@ import {
   generateLatexFromData,
   validateResumeDataForLatex,
 } from "@/lib/latex-generator";
-import { MagicWandIcon } from "@radix-ui/react-icons";
+import { parseLatexToData } from "@/lib/latex-parser";
+import {
+  CounterClockwiseClockIcon,
+  MagicWandIcon,
+} from "@radix-ui/react-icons";
 import { toast } from "sonner";
+import { parseCreditsErrorFromResponse } from "@/lib/ai-credits";
+import { useQueryClient } from "@tanstack/react-query";
+import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
+import { useAiCredits } from "@/hooks/useAiCredits";
+import { AiCreditHint } from "@/components/ui/AiCreditHint";
+import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
 
 const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 
-export default function ContentBuilderForm() {
+type ArraySectionKey = "education" | "experience" | "projects" | "leadership";
+type EnrichSectionType = "experience" | "project" | "leadership";
+
+type EnrichRestoreSnapshot = {
+  sectionType: EnrichSectionType;
+  itemId: string;
+  description: string;
+};
+
+export default function ContentBuilderForm({
+  onManualSave,
+  isManualSaving,
+}: {
+  onManualSave?: (versionLabel?: string) => Promise<void>;
+  isManualSaving?: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { canAfford, showUpgradeCta } = useAiCredits();
   const {
     resumeData,
     setResumeData,
@@ -71,6 +99,8 @@ export default function ContentBuilderForm() {
   // AI Enrichment state
   const [enrichingItemId, setEnrichingItemId] = useState<string | null>(null);
   const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [enrichRestore, setEnrichRestore] =
+    useState<EnrichRestoreSnapshot | null>(null);
 
   const updateEducation = (
     id: string,
@@ -85,40 +115,41 @@ export default function ContentBuilderForm() {
     }));
   };
 
-  const updateExperience = (
-    id: string,
-    field: keyof Experience,
-    value: string,
-  ) => {
-    setResumeData((prev) => ({
-      ...prev,
-      experience: prev.experience.map((exp) =>
-        exp.id === id ? { ...exp, [field]: value } : exp,
-      ),
-    }));
-  };
+  const updateExperience = useCallback(
+    (id: string, field: keyof Experience, value: string) => {
+      setResumeData((prev) => ({
+        ...prev,
+        experience: prev.experience.map((exp) =>
+          exp.id === id ? { ...exp, [field]: value } : exp,
+        ),
+      }));
+    },
+    [setResumeData],
+  );
 
-  const updateProject = (id: string, field: keyof Project, value: string) => {
-    setResumeData((prev) => ({
-      ...prev,
-      projects: prev.projects.map((proj) =>
-        proj.id === id ? { ...proj, [field]: value } : proj,
-      ),
-    }));
-  };
+  const updateProject = useCallback(
+    (id: string, field: keyof Project, value: string) => {
+      setResumeData((prev) => ({
+        ...prev,
+        projects: prev.projects.map((proj) =>
+          proj.id === id ? { ...proj, [field]: value } : proj,
+        ),
+      }));
+    },
+    [setResumeData],
+  );
 
-  const updateLeadership = (
-    id: string,
-    field: keyof Leadership,
-    value: string,
-  ) => {
-    setResumeData((prev) => ({
-      ...prev,
-      leadership: prev.leadership.map((lead) =>
-        lead.id === id ? { ...lead, [field]: value } : lead,
-      ),
-    }));
-  };
+  const updateLeadership = useCallback(
+    (id: string, field: keyof Leadership, value: string) => {
+      setResumeData((prev) => ({
+        ...prev,
+        leadership: prev.leadership.map((lead) =>
+          lead.id === id ? { ...lead, [field]: value } : lead,
+        ),
+      }));
+    },
+    [setResumeData],
+  );
 
   const addEducation = useCallback(() => {
     setResumeData((prev) => ({
@@ -250,45 +281,101 @@ export default function ContentBuilderForm() {
         .map((item, idx) => ({ ...item, order: idx })),
     [],
   );
+  const deleteWithUndo = useCallback(
+    (key: ArraySectionKey, id: string) => {
+      const items = useResumeStore.getState().resumeData[key] as {
+        id: string;
+        order?: number;
+      }[];
+      const index = items.findIndex((i) => i.id === id);
+      if (index === -1) return;
+
+      const deleted = structuredClone(items[index]);
+
+      setResumeData((prev) => ({
+        ...prev,
+        [key]: removeAndNormalize(
+          prev[key] as { id: string; order?: number }[],
+          id,
+        ),
+      }));
+
+      toast("Section removed", {
+        action: {
+          label: "Restore",
+          onClick: () => {
+            setResumeData((prev) => {
+              const arr = [
+                ...(prev[key] as { id: string; order?: number }[]),
+              ];
+              if (arr.some((i) => i.id === deleted.id)) return prev;
+              arr.splice(index, 0, deleted);
+              return {
+                ...prev,
+                [key]: arr.map((item, idx) => ({ ...item, order: idx })),
+              };
+            });
+          },
+        },
+        duration: 8000,
+      });
+    },
+    [removeAndNormalize, setResumeData],
+  );
+
   const deleteEducation = useCallback(
-    (id: string) => {
-      setResumeData((prev) => ({
-        ...prev,
-        education: removeAndNormalize(prev.education, id),
-      }));
-    },
-    [removeAndNormalize, setResumeData],
+    (id: string) => deleteWithUndo("education", id),
+    [deleteWithUndo],
   );
-
   const deleteExperience = useCallback(
-    (id: string) => {
-      setResumeData((prev) => ({
-        ...prev,
-        experience: removeAndNormalize(prev.experience, id),
-      }));
-    },
-    [removeAndNormalize, setResumeData],
+    (id: string) => deleteWithUndo("experience", id),
+    [deleteWithUndo],
   );
-
   const deleteProject = useCallback(
-    (id: string) => {
-      setResumeData((prev) => ({
-        ...prev,
-        projects: removeAndNormalize(prev.projects, id),
-      }));
-    },
-    [removeAndNormalize, setResumeData],
+    (id: string) => deleteWithUndo("projects", id),
+    [deleteWithUndo],
+  );
+  const deleteLeadership = useCallback(
+    (id: string) => deleteWithUndo("leadership", id),
+    [deleteWithUndo],
   );
 
-  const deleteLeadership = useCallback(
-    (id: string) => {
-      setResumeData((prev) => ({
-        ...prev,
-        leadership: removeAndNormalize(prev.leadership, id),
-      }));
-    },
-    [removeAndNormalize, setResumeData],
-  );
+  const handleApplyLatexToForm = useCallback(() => {
+    const previousData = structuredClone(
+      useResumeStore.getState().resumeData,
+    );
+    try {
+      const parsed = parseLatexToData(latex);
+      setResumeData(parsed);
+      setMode("form");
+      toast.success("LaTeX applied to form", {
+        action: {
+          label: "Restore",
+          onClick: () => {
+            setResumeData(previousData);
+            toast.success("Form restored");
+          },
+        },
+        duration: 10000,
+      });
+    } catch {
+      toast.error("Failed to parse LaTeX — check for syntax errors");
+    }
+  }, [latex, setResumeData, setMode]);
+
+  const handleRestoreEnrich = useCallback(() => {
+    if (!enrichRestore) return;
+    const { sectionType, itemId, description } = enrichRestore;
+    if (sectionType === "experience") {
+      updateExperience(itemId, "description", description);
+    } else if (sectionType === "project") {
+      updateProject(itemId, "description", description);
+    } else {
+      updateLeadership(itemId, "description", description);
+    }
+    setEnrichRestore(null);
+    toast.success("Description restored");
+  }, [enrichRestore, updateExperience, updateProject, updateLeadership]);
 
   const showServiceUnavailableToast = useCallback(() => {
     toast.warning("Please Contact Support to Activate PDF Preview", {
@@ -353,24 +440,78 @@ export default function ContentBuilderForm() {
     }
   };
 
+  const renderEnrichActions = (
+    sectionType: EnrichSectionType,
+    item: { id: string; description: string },
+  ) => {
+    const canRestore =
+      enrichRestore?.itemId === item.id &&
+      enrichingItemId === null &&
+      enrichRestore.description !== item.description;
+
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          variant="primary"
+          className="inline-flex items-center justify-center gap-2"
+          onClick={() =>
+            handleEnrichDescription(
+              sectionType,
+              item.id,
+              item.description,
+            )
+          }
+          disabled={
+            enrichingItemId === item.id ||
+            !item.description?.trim() ||
+            !canAfford("enrich")
+          }
+        >
+          <MagicWandIcon />
+          {enrichingItemId === item.id ? (
+            "Enriching..."
+          ) : (
+            <>
+              Enrich with AI
+              <AiCreditHint action="enrich" />
+            </>
+          )}
+        </Button>
+        {canRestore && (
+          <Button
+            variant="outline"
+            className="flex items-center justify-center gap-2"
+            onClick={handleRestoreEnrich}
+          >
+            <CounterClockwiseClockIcon />
+            Restore
+          </Button>
+        )}
+        {enrichError && enrichingItemId === item.id && (
+          <p className="w-full text-sm text-red-600">{enrichError}</p>
+        )}
+        {showUpgradeCta("enrich") && item.description?.trim() && (
+          <UpgradeProCta action="enrich" className="w-full" />
+        )}
+      </div>
+    );
+  };
+
   // AI Enrichment handler
   const handleEnrichDescription = async (
-    sectionType: "experience" | "project" | "leadership",
+    sectionType: EnrichSectionType,
     itemId: string,
     description: string,
   ) => {
-    console.log("[Enrich] Starting enrichment:", {
-      sectionType,
-      itemId,
-      descLength: description.length,
-      keywords: selectedKeywords,
-    });
+    setEnrichRestore({ sectionType, itemId, description });
+
     setEnrichingItemId(itemId);
     setEnrichError(null);
 
     try {
       const response = await fetch("/api/enrich-description", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionType,
@@ -379,89 +520,58 @@ export default function ContentBuilderForm() {
         }),
       });
 
-      console.log("[Enrich] Response status:", response.status, response.ok);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[Enrich] Error response:", errorText);
-        throw new Error("Failed to enrich description");
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+        };
+        const creditsMessage = parseCreditsErrorFromResponse(
+          response.status,
+          errorData,
+        );
+        throw new Error(
+          creditsMessage ?? errorData.error ?? "Failed to enrich description",
+        );
       }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = "";
-      let chunkCount = 0;
 
       if (reader) {
-        console.log("[Enrich] Starting to read stream...");
         while (true) {
           const { done, value } = await reader.read();
-          if (done) {
-            console.log("[Enrich] Stream complete. Total chunks:", chunkCount);
-            break;
-          }
+          if (done) break;
 
-          chunkCount++;
           const chunk = decoder.decode(value, { stream: true });
-          console.log(`[Enrich] Chunk ${chunkCount}:`, chunk.substring(0, 100));
+          for (const line of chunk.split("\n")) {
+            if (!line.trim().startsWith("0:")) continue;
 
-          // toTextStreamResponse() sends data in format: "0:{\"enhanced_description\":\"text\"}\n"
-          const lines = chunk.split("\n");
-          console.log("[Enrich] Lines in chunk:", lines.length);
+            try {
+              const parsed = JSON.parse(line.slice(2));
+              if (parsed.text) {
+                accumulatedText += parsed.text;
 
-          for (const line of lines) {
-            if (line.trim() === "") continue;
-
-            console.log("[Enrich] Processing line:", line.substring(0, 100));
-
-            // Parse the streamed object updates
-            if (line.startsWith("0:")) {
-              try {
-                const jsonStr = line.slice(2);
-                const parsed = JSON.parse(jsonStr);
-
-                console.log("[Enrich] Parsed object:", parsed);
-
-                // Extract the enhanced_description field
-                if (parsed.enhanced_description !== undefined) {
-                  accumulatedText = parsed.enhanced_description;
-
-                  console.log(
-                    "[Enrich] Updated text length:",
-                    accumulatedText.length,
-                  );
-                  console.log(
-                    "[Enrich] Text preview:",
-                    accumulatedText.substring(0, 100),
-                  );
-
-                  // Update the description in real-time
-                  if (sectionType === "experience") {
-                    updateExperience(itemId, "description", accumulatedText);
-                  } else if (sectionType === "project") {
-                    updateProject(itemId, "description", accumulatedText);
-                  } else if (sectionType === "leadership") {
-                    updateLeadership(itemId, "description", accumulatedText);
-                  }
+                if (sectionType === "experience") {
+                  updateExperience(itemId, "description", accumulatedText);
+                } else if (sectionType === "project") {
+                  updateProject(itemId, "description", accumulatedText);
+                } else if (sectionType === "leadership") {
+                  updateLeadership(itemId, "description", accumulatedText);
                 }
-              } catch (e) {
-                console.error(
-                  "[Enrich] Parse error:",
-                  e,
-                  "for line:",
-                  line.substring(0, 100),
-                );
               }
+            } catch {
+              // Failed to parse chunk
             }
           }
         }
       }
 
-      console.log(
-        "[Enrich] Final enriched text length:",
-        accumulatedText.length,
-      );
-      console.log("[Enrich] Final text:", accumulatedText);
+      if (!accumulatedText.trim()) {
+        throw new Error("AI returned an empty response. Please try again.");
+      }
+
+      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     } catch (error) {
       console.error("Error enriching description:", error);
       setEnrichError(
@@ -528,19 +638,25 @@ export default function ContentBuilderForm() {
         {/* Left Panel */}
         <div className="flex h-full w-full flex-col border-gray-200 bg-white lg:h-full lg:w-[720px] lg:border-r">
           <div className="border-b p-4">
-            <div className="flex items-center gap-2">
-              <button
-                className={`rounded px-3 py-1 ${mode === "form" ? "bg-gray-100 font-semibold" : "text-gray-600"}`}
-                onClick={() => setMode("form")}
-              >
-                Form
-              </button>
-              <button
-                className={`rounded px-3 py-1 ${mode === "latex" ? "bg-gray-100 font-semibold" : "text-gray-600"}`}
-                onClick={() => setMode("latex")}
-              >
-                LaTeX
-              </button>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  className={`rounded px-3 py-1 ${mode === "form" ? "bg-gray-100 font-semibold" : "text-gray-600"}`}
+                  onClick={() => setMode("form")}
+                >
+                  Form
+                </button>
+                <button
+                  className={`rounded px-3 py-1 ${mode === "latex" ? "bg-gray-100 font-semibold" : "text-gray-600"}`}
+                  onClick={() => setMode("latex")}
+                >
+                  LaTeX
+                </button>
+              </div>
+              <VersionHistoryDropdown
+                onManualSave={onManualSave}
+                isManualSaving={isManualSaving}
+              />
             </div>
           </div>
 
@@ -799,34 +915,10 @@ export default function ContentBuilderForm() {
                                   type="textarea"
                                   placeholder="- Developed a service to automatically perform unit tests daily."
                                 />
-                                <Button
-                                  variant="primary"
-                                  className="mt-2 flex w-48 items-center justify-center gap-2"
-                                  onClick={() =>
-                                    handleEnrichDescription(
-                                      "experience",
-                                      (item as Experience).id,
-                                      (item as Experience).description,
-                                    )
-                                  }
-                                  disabled={
-                                    enrichingItemId ===
-                                      (item as Experience).id ||
-                                    !(item as Experience).description?.trim()
-                                  }
-                                >
-                                  <MagicWandIcon />
-                                  {enrichingItemId === (item as Experience).id
-                                    ? "Enriching..."
-                                    : "Enrich with AI"}
-                                </Button>
-                                {enrichError &&
-                                  enrichingItemId ===
-                                    (item as Experience).id && (
-                                    <p className="mt-1 text-sm text-red-600">
-                                      {enrichError}
-                                    </p>
-                                  )}
+                                {renderEnrichActions("experience", {
+                                  id: (item as Experience).id,
+                                  description: (item as Experience).description,
+                                })}
                               </>
                             )}
                           />
@@ -940,32 +1032,10 @@ export default function ContentBuilderForm() {
                                   type="textarea"
                                   placeholder="- Developed an automatic bot using Python."
                                 />
-                                <Button
-                                  variant="primary"
-                                  className="mt-2 flex w-48 items-center justify-center gap-2"
-                                  onClick={() =>
-                                    handleEnrichDescription(
-                                      "project",
-                                      (item as Project).id,
-                                      (item as Project).description,
-                                    )
-                                  }
-                                  disabled={
-                                    enrichingItemId === (item as Project).id ||
-                                    !(item as Project).description?.trim()
-                                  }
-                                >
-                                  <MagicWandIcon />
-                                  {enrichingItemId === (item as Project).id
-                                    ? "Enriching..."
-                                    : "Enrich with AI"}
-                                </Button>
-                                {enrichError &&
-                                  enrichingItemId === (item as Project).id && (
-                                    <p className="mt-1 text-sm text-red-600">
-                                      {enrichError}
-                                    </p>
-                                  )}
+                                {renderEnrichActions("project", {
+                                  id: (item as Project).id,
+                                  description: (item as Project).description,
+                                })}
                               </>
                             )}
                           />
@@ -1133,34 +1203,10 @@ export default function ContentBuilderForm() {
                                   type="textarea"
                                   placeholder="- Managed executive board of 5 members."
                                 />
-                                <Button
-                                  variant="primary"
-                                  className="mt-2 flex w-48 items-center justify-center gap-2"
-                                  onClick={() =>
-                                    handleEnrichDescription(
-                                      "leadership",
-                                      (item as Leadership).id,
-                                      (item as Leadership).description,
-                                    )
-                                  }
-                                  disabled={
-                                    enrichingItemId ===
-                                      (item as Leadership).id ||
-                                    !(item as Leadership).description?.trim()
-                                  }
-                                >
-                                  <MagicWandIcon />
-                                  {enrichingItemId === (item as Leadership).id
-                                    ? "Enriching..."
-                                    : "Enrich with AI"}
-                                </Button>
-                                {enrichError &&
-                                  enrichingItemId ===
-                                    (item as Leadership).id && (
-                                    <p className="mt-1 text-sm text-red-600">
-                                      {enrichError}
-                                    </p>
-                                  )}
+                                {renderEnrichActions("leadership", {
+                                  id: (item as Leadership).id,
+                                  description: (item as Leadership).description,
+                                })}
                               </>
                             )}
                           />
@@ -1180,9 +1226,18 @@ export default function ContentBuilderForm() {
             ) : (
               // LaTeX editor mode
               <div className="flex h-full flex-col">
-                <h2 className="mb-3 text-sm font-bold text-gray-900 md:mb-4 md:text-base">
-                  LaTeX Editor
-                </h2>
+                <div className="mb-3 flex items-center justify-between md:mb-4">
+                  <h2 className="text-sm font-bold text-gray-900 md:text-base">
+                    LaTeX Editor
+                  </h2>
+                  <Button
+                    variant="primary"
+                    className="text-sm"
+                    onClick={handleApplyLatexToForm}
+                  >
+                    Apply to Form
+                  </Button>
+                </div>
                 <div className="flex-1">
                   <textarea
                     className="h-full w-full rounded-md border border-gray-300 bg-white p-4 font-mono text-sm"

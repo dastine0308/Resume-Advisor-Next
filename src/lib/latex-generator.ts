@@ -365,8 +365,8 @@ export function generateLatexFromData(
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .forEach((edu) => {
         educationSection += `    \\resumeSubheading\n`;
-        educationSection += `      {${escapeLatex(edu.universityName || "University Name")}}{${escapeLatex(edu.datesAttended || "Dates")}}\n`;
-        educationSection += `      {${escapeLatex(edu.degree || "Degree")}}{${escapeLatex(edu.location || "Location")}}\n`;
+        educationSection += `      {${escapeLatex(edu.universityName || "University Name")}}{${escapeLatex(edu.location || "Location")}}\n`;
+        educationSection += `      {${escapeLatex(edu.degree || "Degree")}}{${escapeLatex(edu.datesAttended || "Dates")}}\n`;
       });
     educationSection += "  \\resumeSubHeadingListEnd\n\n";
   }

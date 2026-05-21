@@ -1,126 +1,72 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useRef } from "react";
-import Link from "next/link";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { PasswordInput } from "@/components/ui/PasswordInput";
-import { login, getUserData } from "@/lib/api-services";
-import { useAuthStore } from "@/stores/useAuthStore";
-import { useAccountStore } from "@/stores/useAccountStore";
+import { useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { setAuth } = useAuthStore();
-  const { setUser } = useAccountStore();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const formRef = useRef<HTMLFormElement | null>(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email || !password) {
-      setError("Please fill out all fields.");
-      return;
-    }
-
+  const handleGoogleLogin = async () => {
+    setLoading(true);
     setError("");
-    setIsLoading(true);
-
-    try {
-      const result = await login({ email, password });
-
-      if (result.success && result.token) {
-        // Store token in cookie
-        setAuth(result.token, result.user_id);
-        // Fetch and store user data
-        const userData = await getUserData();
-        setUser(userData);
-        router.push("/dashboard");
-      } else {
-        setError("Invalid email or password");
-        setIsLoading(false);
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "An error occurred. Please try again.",
-      );
-      setIsLoading(false);
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
     }
   };
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-6 lg:w-[500px]">
-      <div className="rounded-xl bg-white p-6 shadow-md">
-        {/* Header */}
-        <div className="mb-4 text-center">
-          <h1 className="text-2xl font-bold text-indigo-600">Log In</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Welcome back to Resume Advisor
-          </p>
+      <div className="rounded-xl bg-white p-8 shadow-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-bold text-indigo-600">Welcome to Resume Advisor</h1>
+          <p className="mt-2 text-sm text-gray-500">Sign in to continue</p>
         </div>
 
-        {/* Form */}
-        <form
-          ref={(el) => {
-            formRef.current = el;
-          }}
-          onSubmit={handleLogin}
-          className="space-y-4"
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>
+        )}
+
+        <button
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
         >
-          <Input
-            label="Email"
-            name="email"
-            type="email"
-            value={email}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setEmail(e.target.value)
-            }
-            placeholder="you@example.com"
-            required
-          />
-
-          <PasswordInput
-            id="password"
-            label="Password"
-            value={password}
-            onChange={(value: string) => setPassword(value)}
-            showPassword={showPassword}
-            onToggleShowPassword={() => setShowPassword(!showPassword)}
-            placeholder="Create a password"
-          />
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <Button
-            type="submit"
-            variant="primary"
-            className="w-full py-2"
-            disabled={isLoading}
-          >
-            {isLoading ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-indigo-600 hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
+          <GoogleIcon />
+          {loading ? "Redirecting…" : "Continue with Google"}
+        </button>
       </div>
     </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+      <path fill="none" d="M0 0h48v48H0z" />
+    </svg>
   );
 }

@@ -1,20 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, Dropdown, Tabs } from "@/components/ui";
-import { useAccountStore } from "@/stores";
-import {
-  getUserResumes,
-  getUserCoverLetters,
-  deleteResume,
-  deleteCoverLetter,
-} from "@/lib/api-services";
+import { useProfile } from "@/hooks/useProfile";
+import { useResumes, useCoverLetters, useDeleteResume, useDeleteCoverLetter, RESUME_QUERY_KEY, JOB_POSTING_QUERY_KEY } from "@/hooks/useDocuments";
+import { getResumeById, getJobPosting } from "@/lib/api-services";
 import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
 
 interface Document {
-  id: number;
-  jobId?: number;
+  id: string;
+  jobId?: string;
   type: "resume" | "coverLetter";
   title: string;
   modifiedDate: string;
@@ -34,81 +31,85 @@ function formatRelativeDate(dateString: string): string {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("all");
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const user = useAccountStore((state) => state.user);
+  const [deleteConfirm, setDeleteConfirm] = useState<Document | null>(null);
+  const { data: user } = useProfile();
 
-  useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        // Fetch both resumes and cover letters
-        const [resumesResponse, coverLettersResponse] = await Promise.all([
-          getUserResumes(),
-          getUserCoverLetters(),
-        ]);
+  const { data: resumes = [], isLoading: resumesLoading } = useResumes();
+  const { data: coverLetters = [], isLoading: clLoading } = useCoverLetters();
+  const isLoading = resumesLoading || clLoading;
 
-        const resumeDocs: Document[] = resumesResponse?.length
-          ? resumesResponse.map((resume) => ({
-              id: resume.id,
-              jobId: resume.job_id,
-              type: "resume" as const,
-              title: resume.title || "Untitled Resume",
-              modifiedDate: resume.last_updated,
-            }))
-          : [];
+  const deleteResumeMutation = useDeleteResume();
+  const deleteCLMutation = useDeleteCoverLetter();
 
-        const coverLetterDocs: Document[] = coverLettersResponse?.length
-          ? coverLettersResponse.map((coverLetter) => ({
-              id: coverLetter.id,
-              type: "coverLetter" as const,
-              title: coverLetter.title || "Untitled Cover Letter",
-              modifiedDate: coverLetter.last_updated,
-            }))
-          : [];
+  const documents = useMemo<Document[]>(() => {
+    const resumeDocs: Document[] = resumes.map((r) => ({
+      id: r.id,
+      jobId: r.job_id,
+      type: "resume",
+      title: r.title || "Untitled Resume",
+      modifiedDate: r.last_updated,
+    }));
+    const clDocs: Document[] = coverLetters.map((cl) => ({
+      id: cl.id,
+      type: "coverLetter",
+      title: cl.title || "Untitled Cover Letter",
+      modifiedDate: cl.last_updated,
+    }));
+    return [...resumeDocs, ...clDocs].sort(
+      (a, b) => new Date(b.modifiedDate).getTime() - new Date(a.modifiedDate).getTime(),
+    );
+  }, [resumes, coverLetters]);
 
-        // Combine and sort by date (newest first)
-        const allDocs = [...resumeDocs, ...coverLetterDocs].sort((a, b) => {
-          return (
-            new Date(b.modifiedDate).getTime() -
-            new Date(a.modifiedDate).getTime()
-          );
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePrefetchResume = (doc: Document) => {
+    if (doc.type !== "resume") return;
+    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+    prefetchTimerRef.current = setTimeout(() => {
+      queryClient.prefetchQuery({
+        queryKey: RESUME_QUERY_KEY(doc.id),
+        queryFn: () => getResumeById(doc.id),
+        staleTime: 30_000,
+      });
+      if (doc.jobId) {
+        queryClient.prefetchQuery({
+          queryKey: JOB_POSTING_QUERY_KEY(doc.jobId),
+          queryFn: () => getJobPosting(doc.jobId!),
+          staleTime: 30_000,
         });
-
-        setDocuments(allDocs);
-      } catch (error) {
-        console.error("Failed to fetch documents:", error);
-      } finally {
-        setIsLoading(false);
       }
+    }, 300);
+  };
+
+  const handleCancelPrefetch = () => {
+    if (prefetchTimerRef.current) {
+      clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
     }
+  };
 
-    fetchDocuments();
-  }, []);
-
-  // Handle document actions
   const handleEdit = (doc: Document) => {
     if (doc.type === "resume") {
-      // Navigate to the first step of the resume workflow using query param
       router.push(`/resume?resumeId=${encodeURIComponent(doc.id)}`);
     } else {
-      // Navigate to cover letter page with ID for editing
       router.push(`/cover-letter?id=${encodeURIComponent(doc.id)}`);
     }
   };
 
-  const handleDelete = async (doc: Document) => {
-    console.log("Delete document:", doc.id, "type:", doc.type);
-    try {
-      if (doc.type === "resume") {
-        await deleteResume(doc.id);
-      } else {
-        await deleteCoverLetter(doc.id);
-      }
-      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-    } catch (error) {
-      console.error("Failed to delete document:", error);
+  const handleDeleteClick = (doc: Document) => {
+    if (doc.type === "resume") {
+      setDeleteConfirm(doc);
+    } else {
+      deleteCLMutation.mutate(doc.id);
     }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteConfirm) return;
+    deleteResumeMutation.mutate(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   const filteredDocuments = documents.filter((doc) => {
@@ -203,6 +204,8 @@ export default function DashboardPage() {
                       <tr
                         key={`${doc.type}-${doc.id}`}
                         className="hover:bg-gray-50"
+                        onMouseEnter={() => handlePrefetchResume(doc)}
+                        onMouseLeave={handleCancelPrefetch}
                       >
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -231,7 +234,7 @@ export default function DashboardPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(doc)}
+                              onClick={() => handleDeleteClick(doc)}
                               aria-label="Delete"
                               className="text-red-600 hover:bg-red-50"
                             >
@@ -251,6 +254,8 @@ export default function DashboardPage() {
                   <div
                     key={`${doc.type}-${doc.id}`}
                     className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                    onMouseEnter={() => handlePrefetchResume(doc)}
+                    onMouseLeave={handleCancelPrefetch}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -277,7 +282,7 @@ export default function DashboardPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(doc)}
+                          onClick={() => handleDeleteClick(doc)}
                           aria-label="Delete"
                           className="text-red-600 hover:bg-red-50"
                         >
@@ -292,6 +297,38 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div
+            className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900">Delete Resume?</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Deleting{" "}
+              <span className="font-medium">{`"${deleteConfirm.title}"`}</span> will
+              also permanently delete any associated cover letters. This cannot
+              be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                onClick={handleDeleteConfirm}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

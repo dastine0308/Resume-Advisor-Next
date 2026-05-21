@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -8,8 +8,15 @@ import { KeywordChip } from "@/components/resume/KeywordChip";
 import { useJobPostingStore, useResumeStore } from "@/stores";
 import { Label } from "@/components/ui/Label";
 import { analyzeJobDescription } from "@/lib/api-services";
+import { useQueryClient } from "@tanstack/react-query";
+import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
+import { useAiCredits } from "@/hooks/useAiCredits";
+import { AiCreditHint } from "@/components/ui/AiCreditHint";
+import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
 
 export default function JobAnalysisForm() {
+  const queryClient = useQueryClient();
+  const { canAfford, showUpgradeCta } = useAiCredits();
   // Job Description State
 
   const { resumeTitle, setResumeTitle } = useResumeStore();
@@ -36,10 +43,10 @@ export default function JobAnalysisForm() {
     setError(null);
 
     try {
-      const respData = await analyzeJobDescription(
-        JSON.stringify({ job_description: jobDescription }),
-      );
+      const respData = await analyzeJobDescription(jobDescription);
       setJobPosting(respData);
+      setSelectedKeywords([]);
+      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred",
@@ -48,11 +55,14 @@ export default function JobAnalysisForm() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [jobDescription, setJobPosting]);
+  }, [jobDescription, queryClient, setJobPosting, setSelectedKeywords]);
 
   const isFormValid = jobDescription.trim() !== "";
-  const hasKeywords =
-    jobPosting?.requirements && jobPosting.requirements.length > 0;
+  const uniqueRequirements = useMemo(
+    () => [...new Set(jobPosting?.requirements ?? [])],
+    [jobPosting?.requirements],
+  );
+  const hasKeywords = uniqueRequirements.length > 0;
 
   return (
     <main className="flex w-full flex-1 justify-center overflow-scroll">
@@ -124,14 +134,26 @@ export default function JobAnalysisForm() {
                 />
               </div>
 
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <Button
                   variant="primary"
                   onClick={handleAnalyze}
-                  disabled={!isFormValid || isAnalyzing}
+                  disabled={
+                    !isFormValid || isAnalyzing || !canAfford("analyze_job")
+                  }
                 >
-                  {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+                  {isAnalyzing ? (
+                    "Analyzing..."
+                  ) : (
+                    <>
+                      Analyze with AI
+                      <AiCreditHint action="analyze_job" />
+                    </>
+                  )}
                 </Button>
+                {showUpgradeCta("analyze_job") && isFormValid && (
+                  <UpgradeProCta action="analyze_job" />
+                )}
               </div>
             </div>
           </div>
@@ -155,15 +177,13 @@ export default function JobAnalysisForm() {
               <div className="flex justify-between">
                 <Label>Keywords</Label>
                 <p className="text-sm text-gray-600">
-                  {selectedKeywords?.length} keywords selected
+                  {uniqueRequirements.filter((k) => selectedKeywords.includes(k)).length} keywords selected
                 </p>
               </div>
               <div className="min-h-[300px] rounded-lg border border-gray-200 bg-gray-50 p-4">
                 {hasKeywords ? (
                   <div className="flex flex-wrap gap-2">
-                    {jobPosting?.requirements &&
-                      jobPosting?.requirements?.length > 0 &&
-                      jobPosting?.requirements.map((keyword, idx) => (
+                    {uniqueRequirements.map((keyword, idx) => (
                         <KeywordChip
                           key={`${keyword}-${idx}`}
                           label={keyword}
