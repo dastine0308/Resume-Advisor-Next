@@ -1,5 +1,4 @@
-export { useJobPostingStore } from "./useJobPostingStore";
-export { useResumeStore } from "./useResumeStore";
+export { useResumeUIStore } from "./useResumeUIStore";
+export type { CompileErrorKind } from "./useResumeUIStore";
 export { useAccountStore } from "./useAccountStore";
 export { useAuthStore } from "./useAuthStore";
-export { useCoverLetterStore } from "./useCoverLetterStore";

@@ -7,7 +7,8 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { useResumeStore } from "@/stores";
+import { useResumeUIStore } from "@/stores";
+import { useResumeDraftContext } from "@/contexts/ResumeDraftContext";
 import {
   useResumeVersions,
   useRestoreResumeVersion,
@@ -49,47 +50,6 @@ function formatVersionItem(version: ResumeVersionListItem): {
   };
 }
 
-function captureCurrentSnapshot(): RestoreSnapshot {
-  const { resumeTitle, resumeData } = useResumeStore.getState();
-
-  return {
-    title: resumeTitle,
-    sections: {
-      education: resumeData.education,
-      projects: resumeData.projects,
-      skills: resumeData.technicalSkills,
-      work_experience: resumeData.experience,
-      leadership: resumeData.leadership,
-    },
-  };
-}
-
-function applySectionsToStore(
-  sections: ResumeDataSection,
-  title: string,
-  markDirty = false,
-): void {
-  const { setResumeData, setResumeTitle, setLatex, setIsDirty } =
-    useResumeStore.getState();
-
-  setResumeTitle(title, markDirty);
-  setResumeData(
-    (prev) => ({
-      ...prev,
-      education: sections.education ?? [],
-      experience: sections.work_experience ?? [],
-      projects: sections.projects ?? [],
-      leadership: sections.leadership ?? [],
-      technicalSkills: sections.skills ?? prev.technicalSkills,
-    }),
-    markDirty,
-  );
-  setLatex(generateLatexFromData(useResumeStore.getState().resumeData, true));
-  if (!markDirty) {
-    setIsDirty(false);
-  }
-}
-
 interface VersionHistoryDropdownProps {
   onManualSave?: (versionLabel?: string) => Promise<void>;
   isManualSaving?: boolean;
@@ -99,8 +59,10 @@ export function VersionHistoryDropdown({
   onManualSave,
   isManualSaving = false,
 }: VersionHistoryDropdownProps) {
-  const resumeId = useResumeStore((state) => state.resumeId);
-  const jobId = useResumeStore((state) => state.jobId);
+  const { draft, replaceDraft, markSaved } = useResumeDraftContext();
+  const { resumeId, jobId, title, resumeData } = draft;
+  const setLatex = useResumeUIStore((state) => state.setLatex);
+
   const { data: versions = [], isLoading } = useResumeVersions(resumeId);
   const restoreMutation = useRestoreResumeVersion();
   const queryClient = useQueryClient();
@@ -110,6 +72,55 @@ export function VersionHistoryDropdown({
   const [restoreTarget, setRestoreTarget] = useState<ResumeVersionListItem | null>(
     null,
   );
+
+  const captureCurrentSnapshot = (): RestoreSnapshot => ({
+    title,
+    sections: {
+      education: resumeData.education,
+      projects: resumeData.projects,
+      skills: resumeData.technicalSkills,
+      work_experience: resumeData.experience,
+      leadership: resumeData.leadership,
+    },
+  });
+
+  const applySectionsToDraft = (
+    sections: ResumeDataSection,
+    nextTitle: string,
+    markDirty = false,
+  ) => {
+    replaceDraft(
+      {
+        ...draft,
+        title: nextTitle,
+        resumeData: {
+          ...resumeData,
+          education: sections.education ?? [],
+          experience: sections.work_experience ?? [],
+          projects: sections.projects ?? [],
+          leadership: sections.leadership ?? [],
+          technicalSkills: sections.skills ?? resumeData.technicalSkills,
+        },
+      },
+      markDirty,
+    );
+    setLatex(
+      generateLatexFromData(
+        {
+          ...resumeData,
+          education: sections.education ?? [],
+          experience: sections.work_experience ?? [],
+          projects: sections.projects ?? [],
+          leadership: sections.leadership ?? [],
+          technicalSkills: sections.skills ?? resumeData.technicalSkills,
+        },
+        true,
+      ),
+    );
+    if (!markDirty) {
+      markSaved();
+    }
+  };
 
   const items = useMemo(
     () =>
@@ -137,7 +148,7 @@ export function VersionHistoryDropdown({
       { resumeId, versionId },
       {
         onSuccess: (response) => {
-          applySectionsToStore(response.data.sections, response.data.title);
+          applySectionsToDraft(response.data.sections, response.data.title);
           queryClient.invalidateQueries({ queryKey: RESUMES_QUERY_KEY });
           queryClient.invalidateQueries({
             queryKey: RESUME_VERSIONS_QUERY_KEY(resumeId),
@@ -155,7 +166,7 @@ export function VersionHistoryDropdown({
   const handleUndoRestore = () => {
     if (!undoSnapshot) return;
 
-    applySectionsToStore(undoSnapshot.sections, undoSnapshot.title, true);
+    applySectionsToDraft(undoSnapshot.sections, undoSnapshot.title, true);
     setUndoSnapshot(null);
     toast.success("Restored previous content");
   };

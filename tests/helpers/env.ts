@@ -23,6 +23,11 @@ export function hasIntegrationEnv() {
   );
 }
 
+export function hasGroqEnv() {
+  loadTestEnv();
+  return Boolean(process.env.GROQ_API_KEY?.trim());
+}
+
 export function hasE2eEnv() {
   return hasIntegrationEnv();
 }

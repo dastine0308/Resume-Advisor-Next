@@ -1,7 +1,22 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
+import { FileTextIcon, MagicWandIcon } from "@radix-ui/react-icons";
+import brandIcon from "@/app/icon.png";
 import { supabase } from "@/lib/supabase/client";
+
+const FEATURES = [
+  {
+    icon: MagicWandIcon,
+    label: "AI-powered resume tailoring for every job",
+  },
+  {
+    icon: FileTextIcon,
+    label: "Clean, ATS-friendly LaTeX output",
+  },
+] as const;
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -23,26 +38,74 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-6 lg:w-[500px]">
-      <div className="rounded-xl bg-white p-8 shadow-md">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-indigo-600">Welcome to Resume Advisor</h1>
-          <p className="mt-2 text-sm text-gray-500">Sign in to continue</p>
+    <div className="relative z-10 w-full max-w-md">
+      <Link
+        href="/"
+        aria-label="Back to Resume Advisor home"
+        className="mb-8 flex flex-col items-center gap-3 transition-opacity hover:opacity-80"
+      >
+        <Image
+          src={brandIcon}
+          alt="Resume Advisor"
+          width={56}
+          height={56}
+          priority
+          className="h-14 w-14"
+        />
+      </Link>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-lg shadow-indigo-100/50">
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome to Resume Advisor
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Sign in to continue building your professional resume
+          </p>
         </div>
 
         {error && (
-          <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>
+          <p
+            role="alert"
+            className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700"
+          >
+            {error}
+          </p>
         )}
 
         <button
+          type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <GoogleIcon />
           {loading ? "Redirecting…" : "Continue with Google"}
         </button>
+
+        <ul className="mt-8 space-y-3 border-t border-gray-100 pt-6">
+          {FEATURES.map(({ icon: Icon, label }) => (
+            <li
+              key={label}
+              className="flex items-start gap-3 text-sm text-gray-600"
+            >
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
+                <Icon width={14} height={14} aria-hidden />
+              </span>
+              {label}
+            </li>
+          ))}
+        </ul>
       </div>
+
+      <p className="mt-6 text-center text-sm text-gray-500">
+        <Link
+          href="/"
+          className="font-medium text-indigo-600 transition-colors hover:text-indigo-700"
+        >
+          ← Back to home
+        </Link>
+      </p>
     </div>
   );
 }

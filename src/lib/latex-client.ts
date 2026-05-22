@@ -69,15 +69,31 @@ export class LaTeXServiceBusyError extends Error {
   }
 }
 
-export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
-  // If service is already marked as unavailable, throw immediately
-  if (isLatexServiceUnavailable) {
-    throw new LaTeXServiceUnavailableError();
+function isTransientCompileFailure(
+  status: number,
+  retryable: boolean | undefined,
+): boolean {
+  if (retryable === false) {
+    return false;
   }
+  if (status === 503) {
+    return true;
+  }
+  if (status === 502) {
+    return false;
+  }
+  return status >= 500;
+}
 
+function isNetworkFailure(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && error.message.includes("fetch failed"))
+  );
+}
+
+export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
   try {
-
-    // Use Next.js API route instead of direct service call
     const response = await fetch("/api/compile-latex", {
       method: "POST",
       credentials: "include",
@@ -97,39 +113,40 @@ export async function compileLaTeXToPDF(latexContent: string): Promise<Blob> {
         retryable?: boolean;
       };
 
-      // Transient overload — do not mark the service permanently unavailable
-      if (response.status === 503 && errorData.retryable !== false) {
-        throw new LaTeXServiceBusyError(
-          errorData.message ||
-            "The LaTeX service is busy. Please try again in a moment.",
-        );
-      }
-
-      if (response.status >= 500) {
-        isLatexServiceUnavailable = true;
-        throw new LaTeXServiceUnavailableError(
-          errorData.message || "LaTeX service is unavailable",
-        );
-      }
-
-      throw new Error(
+      const message =
         errorData.message ||
-          errorData.error ||
-          `LaTeX compilation failed: ${response.statusText}`,
-      );
+        errorData.error ||
+        "LaTeX compilation failed";
+
+      if (isTransientCompileFailure(response.status, errorData.retryable)) {
+        throw new LaTeXServiceBusyError(message);
+      }
+
+      // Client/validation errors must not mark the service permanently unavailable.
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(message);
+      }
+
+      isLatexServiceUnavailable = true;
+      throw new LaTeXServiceUnavailableError(message);
     }
 
     isLatexServiceUnavailable = false;
     return await response.blob();
   } catch (error) {
-    // Network errors (fetch failed) indicate service is unavailable
     if (
-      error instanceof TypeError ||
-      (error instanceof Error && error.message.includes("fetch failed"))
+      error instanceof LaTeXServiceBusyError ||
+      error instanceof LaTeXServiceUnavailableError
     ) {
-      isLatexServiceUnavailable = true;
-      throw new LaTeXServiceUnavailableError();
+      throw error;
     }
+
+    if (isNetworkFailure(error)) {
+      throw new LaTeXServiceBusyError(
+        "Lost connection while compiling. Please try again in a moment.",
+      );
+    }
+
     console.error("[LaTeX Client] Error:", error);
     throw error;
   }

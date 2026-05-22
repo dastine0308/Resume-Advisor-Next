@@ -1,20 +1,32 @@
 "use client";
 
-import React, { useCallback, useEffect, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import {
+  findLinkedResume,
+  mapResumeToListEntry,
+  contentWithLinkedResumeId,
+  buildCoverLetterDraft,
+  persistCoverLetterDraft,
+  previewTextToParagraphs,
+  coverLetterTitleFromContent,
+  type CoverLetterDraft,
+  type CoverLetterResumeListEntry,
+} from "@/lib/cover-letter-draft";
+import { coverLetterPreviewText } from "@/lib/cover-letter-normalize";
+import { createThrottledStreamUpdate } from "@/lib/throttled-stream-update";
 import { useDebouncedCallback } from "use-debounce";
 import { Button, Dropdown } from "@/components/ui";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
 import { SaveStatusBar, type SaveStatus } from "@/components/resume/SaveStatusBar";
+import { getResumeById, getJobPosting, type ResumesResponse } from "@/lib/api-services";
 import {
-  getUserResumes,
-  getResumeById,
-  getCoverLetterById,
-  getJobPosting,
-} from "@/lib/api-services";
-import { useCoverLetterStore } from "@/stores";
-import { COVER_LETTERS_QUERY_KEY } from "@/hooks/useDocuments";
+  updateCoverLetterCachesAfterSave,
+  useSuspenseResumes,
+  useSuspenseCoverLetter,
+  type CoverLetterLoadResult,
+} from "@/hooks/useDocuments";
 import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
 import { useAiCredits } from "@/hooks/useAiCredits";
 import { AiCreditHint } from "@/components/ui/AiCreditHint";
@@ -26,6 +38,7 @@ import {
   ChevronDownIcon,
   CounterClockwiseClockIcon,
 } from "@radix-ui/react-icons";
+import { CoverLetterContentSkeleton } from "@/components/cover-letter/CoverLetterContentSkeleton";
 import type { CoverLetterContent } from "@/types/cover-letter";
 
 const TONE_LIST = [
@@ -35,145 +48,223 @@ const TONE_LIST = [
   { tone: "Formal" as const },
 ];
 
-function CoverLetterPageContent() {
+type EditableCoverLetterLoad = Extract<
+  CoverLetterLoadResult,
+  { kind: "new" } | { kind: "found" }
+>;
+
+function CoverLetterNotFound() {
+  const router = useRouter();
+  return (
+    <div className="overflow-auto px-4 py-6 md:px-6 md:py-10">
+      <div className="mx-auto w-full max-w-5xl text-center">
+        <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
+          Cover letter not found
+        </h1>
+        <p className="mt-2 text-sm text-gray-600 md:text-base">
+          This cover letter may have been deleted or you may not have access to
+          it.
+        </p>
+        <Button
+          variant="primary"
+          className="mt-6"
+          onClick={() => router.push("/dashboard")}
+        >
+          Back to dashboard
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CoverLetterForm({
+  routeCoverLetterId,
+  coverLetterLoad,
+  resumes,
+  onFirstPersist,
+}: {
+  routeCoverLetterId: string | null;
+  coverLetterLoad: EditableCoverLetterLoad;
+  resumes: ResumesResponse[];
+  onFirstPersist?: (coverLetterId: string) => void;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
-  const initialCoverLetterId = searchParams.get("id") || null;
+  const resumeList = useMemo(
+    () => resumes.map(mapResumeToListEntry),
+    [resumes],
+  );
 
-  const [resumeTitle, setResumeTitle] = useState("");
+  const linkedResume = useMemo(() => {
+    if (coverLetterLoad.kind !== "found") return null;
+    return findLinkedResume(resumeList, coverLetterLoad.coverLetter);
+  }, [coverLetterLoad, resumeList]);
+
+  const [draft, setDraft] = useState<CoverLetterDraft>(() =>
+    buildCoverLetterDraft(coverLetterLoad, linkedResume),
+  );
+  const [manualResume, setManualResume] =
+    useState<CoverLetterResumeListEntry | null>(null);
+  const [streamPreview, setStreamPreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [resumeList, setResumeList] = useState<
-    {
-      id: string | null;
-      jobId: string;
-      title: string;
-      modifiedDate: string | null;
-    }[]
-  >([]);
-  const [restoreSnapshot, setRestoreSnapshot] = useState<{
-    generatedContent: string;
-    paragraphs: string[];
-  } | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [restoreSnapshot, setRestoreSnapshot] = useState<string[] | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
+    coverLetterLoad.kind === "found" &&
+    coverLetterLoad.coverLetter.content.paragraphs.length > 0
+      ? "saved"
+      : "idle",
+  );
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() =>
+    coverLetterLoad.kind === "found" && coverLetterLoad.coverLetter.last_updated
+      ? new Date(coverLetterLoad.coverLetter.last_updated)
+      : null,
+  );
 
-  const {
-    resumeId,
-    setResumeId,
-    setJobId,
-    setTitle,
-    setContent,
-    content,
-    generatedContent,
-    setGeneratedContent,
-    setCoverLetterId,
-  } = useCoverLetterStore();
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const routeCoverLetterIdRef = useRef(routeCoverLetterId);
+  routeCoverLetterIdRef.current = routeCoverLetterId;
 
   const { canAfford, showUpgradeCta, user } = useAiCredits();
+
+  const selectedResume = manualResume ?? linkedResume;
+  const selectedResumeId = selectedResume?.id ?? null;
+  const resumeTitle = selectedResume?.title ?? "";
+  const { content } = draft;
+  const previewText = streamPreview ?? coverLetterPreviewText(content);
+  const isEditing = content.paragraphs.length > 0 || streamPreview !== null;
+
+  useEffect(() => {
+    if (manualResume) return;
+    setDraft((prev) => ({
+      ...prev,
+      content: contentWithLinkedResumeId(prev.content, linkedResume),
+    }));
+  }, [linkedResume, manualResume]);
 
   const updateContentField = <K extends keyof CoverLetterContent>(
     field: K,
     value: CoverLetterContent[K],
   ) => {
     setIsDirty(true);
-    setContent((prev) => ({ ...prev, [field]: value }));
+    setDraft((prev) => ({
+      ...prev,
+      content: { ...prev.content, [field]: value },
+    }));
   };
 
-  const canGenerate = !!resumeId && content?.descriptive_prompt?.trim() !== "";
+  const canGenerate =
+    !!selectedResumeId && content.descriptive_prompt.trim() !== "";
 
   useEffect(() => {
     if (saveStatus === "saving") return;
-
     if (isDirty && content.paragraphs.length > 0) {
       setSaveStatus("unsaved");
     }
   }, [isDirty, content.paragraphs.length, saveStatus]);
 
-  useEffect(() => {
-    async function loadData() {
-      const [list, coverLetterData] = await Promise.all([
-        getUserResumes().then((response) =>
-          (response ?? []).map((resume) => ({
-            id: resume.id || null,
-            jobId: resume.job_id,
-            title: resume.title || "Untitled Resume",
-            modifiedDate: resume.last_updated,
-          })),
-        ).catch(() => []),
-        initialCoverLetterId
-          ? getCoverLetterById(initialCoverLetterId).catch(() => null)
-          : Promise.resolve(null),
-      ]);
+  const saveCoverLetterNow = useCallback(async () => {
+    const current = draftRef.current;
+    const routeId = routeCoverLetterIdRef.current;
 
-      setResumeList(list);
+    if (!current.jobId || current.content.paragraphs.length === 0) return;
 
-      if (coverLetterData) {
-        setCoverLetterId(initialCoverLetterId!);
-        setTitle(coverLetterData.title);
-        const savedResumeId = coverLetterData.content.resume_id;
-        const matchedResume = savedResumeId
-          ? list.find((r) => r.id === savedResumeId)
-          : list.find((r) => r.jobId === coverLetterData.job_id);
-        if (matchedResume) {
-          setResumeId(matchedResume.id);
-          setResumeTitle(matchedResume.title);
-        }
-        setJobId(coverLetterData.job_id);
-        setContent(coverLetterData.content);
-        setGeneratedContent(coverLetterData.content.paragraphs.join("\n\n"));
-        setIsEditing(true);
+    setSaveStatus("saving");
+
+    try {
+      const hadPersistedId = !!(current.coverLetterId ?? routeId);
+      const response = await persistCoverLetterDraft(current, routeId);
+      if (response?.success && response.cover_letter_id && current.jobId) {
+        const savedId = String(response.cover_letter_id);
+        const savedAt = new Date();
+        const savedTitle = coverLetterTitleFromContent(current.content);
+
+        setDraft((prev) => ({
+          ...prev,
+          coverLetterId: savedId,
+        }));
+        updateCoverLetterCachesAfterSave(queryClient, {
+          coverLetterId: savedId,
+          title: savedTitle,
+          jobId: current.jobId,
+          content: current.content,
+          savedAt,
+        });
+        setLastSavedAt(savedAt);
+        setSaveStatus("saved");
         setIsDirty(false);
-        if (coverLetterData.last_updated) {
-          setLastSavedAt(new Date(coverLetterData.last_updated));
-          setSaveStatus("saved");
+
+        if (!hadPersistedId) {
+          onFirstPersist?.(savedId);
+          router.replace(
+            `/cover-letter?id=${encodeURIComponent(savedId)}`,
+            { scroll: false },
+          );
         }
+        return;
       }
+      setSaveStatus("error");
+      toast.error("Failed to save cover letter");
+    } catch (err) {
+      setSaveStatus("error");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save cover letter",
+      );
     }
+  }, [queryClient, router, onFirstPersist]);
 
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCoverLetterId]);
+  const debouncedSave = useDebouncedCallback(saveCoverLetterNow, 2000);
+  const debouncedSaveRef = useRef(debouncedSave);
+  debouncedSaveRef.current = debouncedSave;
 
-  const handleResumeSelect = async (resume: {
-    id: string | null;
-    jobId: string;
-    title: string;
-  }) => {
-    setResumeTitle(resume.title);
-    setResumeId(resume.id);
-    setJobId(resume.jobId);
-    setContent((prev) => ({ ...prev, resume_id: resume.id }));
+  const saveFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        content,
+        jobId: draft.jobId,
+        coverLetterId: draft.coverLetterId,
+      }),
+    [content, draft.jobId, draft.coverLetterId],
+  );
+
+  useEffect(() => {
+    if (isDirty && content.paragraphs.length > 0) {
+      debouncedSaveRef.current();
+    }
+  }, [saveFingerprint, isDirty, content.paragraphs.length]);
+
+  useEffect(() => {
+    return () => {
+      debouncedSaveRef.current.flush();
+    };
+  }, []);
+
+  const handleResumeSelect = (resume: CoverLetterResumeListEntry) => {
+    setManualResume(resume);
+    setIsDirty(true);
+    setDraft((prev) => ({
+      ...prev,
+      jobId: resume.jobId,
+      content: { ...prev.content, resume_id: resume.id },
+    }));
   };
 
   const handleGenerate = async () => {
-    if (!resumeId || !content?.descriptive_prompt?.trim()) {
+    if (!selectedResumeId || !content.descriptive_prompt.trim()) {
       toast.error("Please select a resume and provide a descriptive prompt");
       return;
     }
 
-    const state = useCoverLetterStore.getState();
-    if (
-      state.generatedContent.trim() !== "" ||
-      state.content.paragraphs.length > 0
-    ) {
-      setRestoreSnapshot({
-        generatedContent: state.generatedContent,
-        paragraphs: [...state.content.paragraphs],
-      });
+    if (content.paragraphs.length > 0) {
+      setRestoreSnapshot([...content.paragraphs]);
     }
 
     setIsGenerating(true);
-    setGeneratedContent("");
-    setIsEditing(false);
-
-    const coverLetterTitle = `${content.company || "Cover Letter"} - ${content.position || "Position"}`;
-    setTitle(coverLetterTitle);
+    setStreamPreview("");
 
     try {
-      const resumeData = await getResumeById(resumeId);
+      const resumeData = await getResumeById(selectedResumeId);
 
       let keywords: string[] = [];
       let jobDescription = "";
@@ -188,7 +279,7 @@ function CoverLetterPageContent() {
           jobCompany = jobPosting?.company?.name || "";
           jobPosition = jobPosting?.title || "";
         } catch {
-          // Job posting not found or failed to fetch — proceed without keywords
+          // Job posting not found — proceed without keywords
         }
       }
 
@@ -202,12 +293,12 @@ function CoverLetterPageContent() {
           jobDescription,
           jobCompany,
           jobPosition,
-          recipient: content?.recipient || "Hiring Manager",
-          company: content?.company || "",
-          position: content?.position || "",
-          tone: content?.tone || "Professional",
-          userPrompt: content?.descriptive_prompt || "",
-          closing: content?.closing_signature || "Your Name",
+          recipient: content.recipient || "Hiring Manager",
+          company: content.company || "",
+          position: content.position || "",
+          tone: content.tone || "Professional",
+          userPrompt: content.descriptive_prompt || "",
+          closing: content.closing_signature || "Your Name",
           personalInfo: {
             firstName: user?.first_name ?? "",
             lastName: user?.last_name ?? "",
@@ -228,40 +319,46 @@ function CoverLetterPageContent() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
+      const previewThrottle = createThrottledStreamUpdate(setStreamPreview);
 
       if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          for (const line of chunk.split("\n")) {
-            if (line.trim().startsWith("0:")) {
-              try {
-                const parsed = JSON.parse(line.substring(2));
-                if (parsed.text) {
-                  fullText += parsed.text;
-                  setGeneratedContent(fullText);
+            const chunk = decoder.decode(value, { stream: true });
+            for (const line of chunk.split("\n")) {
+              if (line.trim().startsWith("0:")) {
+                try {
+                  const parsed = JSON.parse(line.substring(2));
+                  if (parsed.text) {
+                    fullText += parsed.text;
+                    previewThrottle.push(fullText);
+                  }
+                } catch {
+                  // Failed to parse chunk
                 }
-              } catch {
-                // Failed to parse chunk
               }
             }
           }
+        } finally {
+          previewThrottle.flush(fullText);
         }
       }
 
-      const paragraphs = fullText
-        .split("\n\n")
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0);
-
-      setContent((prev) => ({ ...prev, paragraphs: paragraphs }));
+      const paragraphs = previewTextToParagraphs(fullText);
+      setStreamPreview(null);
+      setDraft((prev) => ({
+        ...prev,
+        jobId: prev.jobId ?? resumeData.job_id,
+        content: { ...prev.content, paragraphs },
+      }));
       toast.success("Cover letter generated successfully!");
-      setIsEditing(true);
       setIsDirty(true);
       await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     } catch (error) {
+      setStreamPreview(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to generate cover letter",
       );
@@ -270,63 +367,23 @@ function CoverLetterPageContent() {
     }
   };
 
-  const saveCoverLetterNow = useCallback(async () => {
-    const state = useCoverLetterStore.getState();
-
-    if (!state.jobId || state.content.paragraphs.length === 0) return;
-    if (!state.title || state.title.trim() === "") return;
-
-    setSaveStatus("saving");
-
-    try {
-      const response = await state.saveCoverLetter();
-      if (response?.success) {
-        const savedAt = new Date();
-        setLastSavedAt(savedAt);
-        setSaveStatus("saved");
-        setIsDirty(false);
-        queryClient.invalidateQueries({ queryKey: COVER_LETTERS_QUERY_KEY });
-        return;
-      }
-      setSaveStatus("error");
-    } catch {
-      setSaveStatus("error");
-    }
-  }, [queryClient]);
-
-  const debouncedSave = useDebouncedCallback(saveCoverLetterNow, 2000);
-
-  useEffect(() => {
-    if (isDirty && content.paragraphs.length > 0) {
-      debouncedSave();
-    }
-  }, [content, isDirty, debouncedSave]);
-
-  useEffect(() => {
-    return () => {
-      debouncedSave.flush();
-      useCoverLetterStore.getState().resetStore();
-    };
-  }, [debouncedSave]);
-
   const handleEditContent = (newText: string) => {
     setIsDirty(true);
-    setGeneratedContent(newText);
-    const paragraphs = newText
-      .split("\n\n")
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0);
-    setContent((prev) => ({ ...prev, paragraphs }));
+    setDraft((prev) => ({
+      ...prev,
+      content: {
+        ...prev.content,
+        paragraphs: previewTextToParagraphs(newText),
+      },
+    }));
   };
 
   const handleRestoreCoverLetter = () => {
     if (!restoreSnapshot) return;
-    setGeneratedContent(restoreSnapshot.generatedContent);
-    setContent((prev) => ({
+    setDraft((prev) => ({
       ...prev,
-      paragraphs: restoreSnapshot.paragraphs,
+      content: { ...prev.content, paragraphs: restoreSnapshot },
     }));
-    setIsEditing(restoreSnapshot.generatedContent.trim() !== "");
     setIsDirty(true);
     setRestoreSnapshot(null);
     toast.success("Cover letter restored");
@@ -349,7 +406,9 @@ function CoverLetterPageContent() {
             <SaveStatusBar
               status={saveStatus}
               lastSavedAt={lastSavedAt}
-              onRetry={saveStatus === "error" ? () => void saveCoverLetterNow() : undefined}
+              onRetry={
+                saveStatus === "error" ? () => void saveCoverLetterNow() : undefined
+              }
               className="sm:pt-2"
             />
           </div>
@@ -358,7 +417,6 @@ function CoverLetterPageContent() {
           <main className="flex w-full flex-1 justify-center">
             <div className="w-full max-w-5xl">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {/* Editor */}
                 <section className="rounded-lg bg-white p-5 shadow-sm md:p-6">
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -434,12 +492,7 @@ function CoverLetterPageContent() {
                             .map((r) => ({
                               label: r.title,
                               value: r.title,
-                              onClick: () =>
-                                handleResumeSelect({
-                                  id: r.id,
-                                  jobId: r.jobId,
-                                  title: r.title,
-                                }),
+                              onClick: () => handleResumeSelect(r),
                             }))}
                           disabled={resumeList.length === 0}
                         />
@@ -447,7 +500,7 @@ function CoverLetterPageContent() {
                     </div>
 
                     <Textarea
-                      value={content?.descriptive_prompt || ""}
+                      value={content.descriptive_prompt}
                       label="Descriptive Prompt"
                       required
                       onChange={(e) =>
@@ -471,13 +524,7 @@ function CoverLetterPageContent() {
                     <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          setResumeTitle("");
-                          setGeneratedContent("");
-                          setIsEditing(false);
-                          useCoverLetterStore.getState().resetStore();
-                          router.push("/dashboard");
-                        }}
+                        onClick={() => router.push("/dashboard")}
                         className="w-full sm:w-auto"
                       >
                         Cancel
@@ -508,7 +555,6 @@ function CoverLetterPageContent() {
                   </div>
                 </section>
 
-                {/* Preview */}
                 <aside className="rounded-lg bg-white p-5 shadow-sm md:p-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-900">
@@ -522,7 +568,7 @@ function CoverLetterPageContent() {
                   <div className="mt-4 rounded border border-gray-100 bg-gray-50">
                     {isEditing ? (
                       <Textarea
-                        value={generatedContent}
+                        value={previewText}
                         onChange={(e) => handleEditContent(e.target.value)}
                         className="h-[420px] w-full resize-none border-0 bg-transparent p-4 text-sm leading-relaxed text-gray-800 focus:outline-none focus:ring-0"
                         placeholder="Your generated cover letter will appear here..."
@@ -530,7 +576,7 @@ function CoverLetterPageContent() {
                     ) : (
                       <div className="h-[420px] overflow-auto p-4">
                         <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                          {generatedContent ||
+                          {previewText ||
                             "Click 'Generate with AI' to create your cover letter..."}
                         </pre>
                       </div>
@@ -552,17 +598,17 @@ function CoverLetterPageContent() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        navigator.clipboard?.writeText(generatedContent);
+                        navigator.clipboard?.writeText(previewText);
                         toast.success("Copied to clipboard!");
                       }}
                       className="w-full sm:flex-1"
-                      disabled={!generatedContent}
+                      disabled={!previewText}
                     >
                       Copy
                     </Button>
                     <Button
                       onClick={() => {
-                        const blob = new Blob([generatedContent], {
+                        const blob = new Blob([previewText], {
                           type: "text/plain",
                         });
                         const url = URL.createObjectURL(blob);
@@ -575,7 +621,7 @@ function CoverLetterPageContent() {
                         document.body.removeChild(a);
                       }}
                       className="w-full sm:flex-1"
-                      disabled={!generatedContent}
+                      disabled={!previewText}
                     >
                       Download
                     </Button>
@@ -590,9 +636,46 @@ function CoverLetterPageContent() {
   );
 }
 
+function CoverLetterPageContent() {
+  const coverLetterId = useSearchParams().get("id");
+  const { data: coverLetterLoad } = useSuspenseCoverLetter(coverLetterId);
+  const { data: resumes } = useSuspenseResumes();
+  const [formKey, setFormKey] = useState(() => coverLetterId ?? "__new__");
+  const skipRemountForIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!coverLetterId) {
+      skipRemountForIdRef.current = null;
+      setFormKey("__new__");
+      return;
+    }
+    if (skipRemountForIdRef.current === coverLetterId) {
+      skipRemountForIdRef.current = null;
+      return;
+    }
+    setFormKey(coverLetterId);
+  }, [coverLetterId]);
+
+  if (coverLetterLoad.kind === "not_found") {
+    return <CoverLetterNotFound />;
+  }
+
+  return (
+    <CoverLetterForm
+      key={formKey}
+      routeCoverLetterId={coverLetterId}
+      coverLetterLoad={coverLetterLoad}
+      resumes={resumes}
+      onFirstPersist={(id) => {
+        skipRemountForIdRef.current = id;
+      }}
+    />
+  );
+}
+
 export default function CoverLetterPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+    <Suspense fallback={<CoverLetterContentSkeleton />}>
       <CoverLetterPageContent />
     </Suspense>
   );

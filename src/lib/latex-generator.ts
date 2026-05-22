@@ -1,5 +1,5 @@
 import type { ResumeData } from "@/types/resume";
-import { validateLatexText } from "./utils";
+import { ENGLISH_RESUME_GUIDANCE, validateLatexText } from "./utils";
 
 /**
  * Custom error class for LaTeX validation errors
@@ -137,7 +137,7 @@ export function validateResumeDataForLatex(data: ResumeData): void {
     const validation = validateLatexText(value);
     if (!validation.isValid) {
       throw new LaTeXValidationError(
-        `Non-English characters found in "${fieldName}": ${validation.invalidChars.slice(0, 3).join(", ")}`,
+        `${ENGLISH_RESUME_GUIDANCE} Non-English characters in "${fieldName}": ${validation.invalidChars.slice(0, 3).join(", ")}`,
         validation.invalidChars,
         fieldName,
       );

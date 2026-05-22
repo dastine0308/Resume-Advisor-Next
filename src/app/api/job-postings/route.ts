@@ -1,8 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, verifyUserOwnsJob } from "@/lib/auth-helper";
+import {
+  canPersistJobPosting,
+  isUnknownField,
+  LOW_QUALITY_JOB_PERSIST_ERROR,
+  nullIfUnknown,
+  unknownFieldPersistError,
+} from "@/lib/job-analysis-quality";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+function lowQualityResponse() {
+  return NextResponse.json(
+    { success: false, error: LOW_QUALITY_JOB_PERSIST_ERROR, code: "LOW_QUALITY_INPUT" },
+    { status: 422 },
+  );
+}
+
+function rejectIfUnknownField(
+  field: unknown,
+  label: string,
+): NextResponse | null {
+  if (field === undefined) return null;
+  if (isUnknownField(String(field))) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: unknownFieldPersistError(label),
+        code: "LOW_QUALITY_INPUT",
+      },
+      { status: 422 },
+    );
+  }
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   const { user, supabase, error } = await getAuthUser();
@@ -27,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     const { data: existing } = await supabase!
       .from("job_postings")
-      .select("id, company_id")
+      .select("id, company_id, title, job_location, company ( name )")
       .eq("id", jobId)
       .eq("user_id", user!.id)
       .single();
@@ -35,11 +67,76 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Job posting not found" }, { status: 404 });
     }
 
+    let existingRequirements: string[] = [];
+    if (body.requirements === undefined) {
+      const { data: requirementRows } = await supabase!
+        .from("job_requirements")
+        .select("requirement")
+        .eq("job_id", jobId);
+      existingRequirements =
+        requirementRows?.map((row) => String(row.requirement)).filter(Boolean) ?? [];
+    }
+
+    const hasAnyUpdate =
+      body.title !== undefined ||
+      body.company_name !== undefined ||
+      body.job_location !== undefined ||
+      body.description !== undefined ||
+      body.requirements !== undefined ||
+      body.selected_requirements !== undefined ||
+      body.company_location !== undefined ||
+      body.company_industry !== undefined ||
+      body.company_website !== undefined ||
+      body.close_date !== undefined;
+
+    if (hasAnyUpdate) {
+      const existingCompanyName = String(
+        (existing.company as { name?: string } | null)?.name ?? "",
+      ).trim();
+      const effectiveTitle =
+        body.title !== undefined
+          ? String(body.title).trim()
+          : String(existing.title ?? "").trim();
+      const effectiveCompanyName =
+        body.company_name !== undefined
+          ? String(body.company_name).trim()
+          : existingCompanyName;
+      const effectiveLocation =
+        body.job_location !== undefined
+          ? String(body.job_location).trim()
+          : String(existing.job_location ?? "").trim();
+      const effectiveRequirements =
+        body.requirements !== undefined
+          ? ((body.requirements as string[] | undefined) ?? [])
+          : existingRequirements;
+
+      if (
+        !canPersistJobPosting({
+          title: effectiveTitle,
+          company_name: effectiveCompanyName,
+          job_location: effectiveLocation,
+          requirements: effectiveRequirements,
+        })
+      ) {
+        return lowQualityResponse();
+      }
+    }
+
     const companyUpdates: Record<string, unknown> = {};
-    if (body.company_name !== undefined) companyUpdates.name = body.company_name;
-    if (body.company_location !== undefined) companyUpdates.location = body.company_location;
-    if (body.company_industry !== undefined) companyUpdates.industry = body.company_industry;
-    if (body.company_website !== undefined) companyUpdates.website = body.company_website;
+    if (body.company_name !== undefined) {
+      const rejected = rejectIfUnknownField(body.company_name, "company_name");
+      if (rejected) return rejected;
+      companyUpdates.name = String(body.company_name).trim();
+    }
+    if (body.company_location !== undefined) {
+      companyUpdates.location = nullIfUnknown(String(body.company_location));
+    }
+    if (body.company_industry !== undefined) {
+      companyUpdates.industry = nullIfUnknown(String(body.company_industry));
+    }
+    if (body.company_website !== undefined) {
+      companyUpdates.website = nullIfUnknown(String(body.company_website));
+    }
 
     if (Object.keys(companyUpdates).length > 0) {
       const { error: companyErr } = await supabase!
@@ -55,9 +152,17 @@ export async function POST(req: NextRequest) {
     }
 
     const jobUpdates: Record<string, unknown> = {};
-    if (body.title) jobUpdates.title = body.title;
+    if (body.title !== undefined) {
+      const rejected = rejectIfUnknownField(body.title, "title");
+      if (rejected) return rejected;
+      jobUpdates.title = String(body.title).trim();
+    }
     if (body.description !== undefined) jobUpdates.description = body.description;
-    if (body.job_location !== undefined) jobUpdates.job_location = body.job_location;
+    if (body.job_location !== undefined) {
+      const rejected = rejectIfUnknownField(body.job_location, "job_location");
+      if (rejected) return rejected;
+      jobUpdates.job_location = String(body.job_location).trim();
+    }
     if (body.close_date !== undefined) jobUpdates.close_date = body.close_date || null;
 
     if (Object.keys(jobUpdates).length > 0) {
@@ -111,7 +216,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Create new job posting
-  const { title, company_name, job_location } = body;
+  const title = String(body.title ?? "").trim();
+  const company_name = String(body.company_name ?? "").trim();
+  const job_location = String(body.job_location ?? "").trim();
+
   if (!title || !company_name || !job_location) {
     return NextResponse.json(
       { success: false, error: "Missing required fields: title, company_name, job_location" },
@@ -119,13 +227,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (
+    !canPersistJobPosting({
+      company_name,
+      title,
+      job_location,
+      requirements: body.requirements as string[] | undefined,
+    })
+  ) {
+    return lowQualityResponse();
+  }
+
   const { data: company, error: companyError } = await supabase!
     .from("company")
     .insert({
       name: company_name,
-      location: body.company_location ?? null,
-      industry: body.company_industry ?? null,
-      website: body.company_website ?? null,
+      location: nullIfUnknown(String(body.company_location ?? "")),
+      industry: nullIfUnknown(String(body.company_industry ?? "")),
+      website: nullIfUnknown(String(body.company_website ?? "")),
     })
     .select("id")
     .single();

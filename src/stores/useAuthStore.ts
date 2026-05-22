@@ -1,15 +1,11 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase/client";
-import { useResumeStore } from "./useResumeStore";
-import { useJobPostingStore } from "./useJobPostingStore";
+import { useResumeUIStore } from "./useResumeUIStore";
 import { useAccountStore } from "./useAccountStore";
-import { useCoverLetterStore } from "./useCoverLetterStore";
 
 export function clearAllClientStores() {
-  useResumeStore.getState().resetStore();
-  useJobPostingStore.getState().resetStore();
+  useResumeUIStore.getState().resetUI();
   useAccountStore.getState().resetUser();
-  useCoverLetterStore.getState().resetStore();
 
   if (typeof localStorage !== "undefined") {
     localStorage.removeItem("resume-storage");
