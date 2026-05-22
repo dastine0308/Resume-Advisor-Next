@@ -1,5 +1,8 @@
 import { Header } from "@/components/header";
 
+// Authenticated pages fetch user data via React Query; skip static prerender at build time.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
