@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { ENGLISH_RESUME_FAQ_ANSWER } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
 export default function LandingPage() {
@@ -248,8 +249,12 @@ export default function LandingPage() {
               answer="Yes. LaTeX generates clean, structured text that Applicant Tracking Systems can parse much easier than complex Word templates."
             />
             <FAQItem
+              question="What language should I write my resume in?"
+              answer={ENGLISH_RESUME_FAQ_ANSWER}
+            />
+            <FAQItem
               question="Is it free to start?"
-              answer="Yes, you can build your first resume and cover letter for free."
+              answer="Yes. Building, editing, saving, and exporting your resume is completely free. AI features—job analysis, bullet enrichment, and cover letter generation—use a monthly credit allowance (10 free credits per month). Upgrade to Pro for 300 credits per month."
             />
           </div>
         </div>

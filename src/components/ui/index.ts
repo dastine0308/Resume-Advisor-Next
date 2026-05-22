@@ -7,3 +7,9 @@ export { Tab, Tabs } from "./Tabs";
 export { UserDropdown } from "./UserDropdown";
 export { Dropdown } from "./Dropdown";
 export { Modal } from "./Modal";
+export {
+  Skeleton,
+  SkeletonField,
+  FormSectionSkeleton,
+  DashboardDocumentsSkeleton,
+} from "./Skeleton";

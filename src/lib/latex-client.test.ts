@@ -33,7 +33,7 @@ describe("compileLaTeXToPDF", () => {
     expect(getLatexServiceUnavailable()).toBe(false);
   });
 
-  it("500 marks service unavailable", async () => {
+  it("500 throws LaTeXServiceBusyError without marking service unavailable", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -44,9 +44,27 @@ describe("compileLaTeXToPDF", () => {
     );
 
     await expect(compileLaTeXToPDF("x")).rejects.toBeInstanceOf(
-      LaTeXServiceUnavailableError,
+      LaTeXServiceBusyError,
     );
-    expect(getLatexServiceUnavailable()).toBe(true);
+    expect(getLatexServiceUnavailable()).toBe(false);
+  });
+
+  it("400 throws without marking service unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          message: "Non-English characters detected",
+        }),
+      }),
+    );
+
+    await expect(compileLaTeXToPDF("x")).rejects.toThrow(
+      "Non-English characters detected",
+    );
+    expect(getLatexServiceUnavailable()).toBe(false);
   });
 
   it("502 marks service unavailable", async () => {
@@ -85,6 +103,70 @@ describe("compileLaTeXToPDF", () => {
       LaTeXServiceUnavailableError,
     );
     expect(getLatexServiceUnavailable()).toBe(true);
+  });
+
+  it("network errors throw LaTeXServiceBusyError without marking service unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    await expect(compileLaTeXToPDF("x")).rejects.toBeInstanceOf(
+      LaTeXServiceBusyError,
+    );
+    expect(getLatexServiceUnavailable()).toBe(false);
+  });
+
+  it("recovers after a transient network error without manual reset", async () => {
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob([pdfBytes], { type: "application/pdf" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(compileLaTeXToPDF("x")).rejects.toBeInstanceOf(
+      LaTeXServiceBusyError,
+    );
+    expect(getLatexServiceUnavailable()).toBe(false);
+
+    const blob = await compileLaTeXToPDF("x");
+    expect(blob.type).toBe("application/pdf");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not short-circuit when service was previously marked unavailable", async () => {
+    resetLatexServiceState();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => ({ retryable: false }),
+      }),
+    );
+    await expect(compileLaTeXToPDF("x")).rejects.toBeInstanceOf(
+      LaTeXServiceUnavailableError,
+    );
+    expect(getLatexServiceUnavailable()).toBe(true);
+
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob([pdfBytes], { type: "application/pdf" }),
+      }),
+    );
+
+    const blob = await compileLaTeXToPDF("x");
+    expect(blob.type).toBe("application/pdf");
+    expect(getLatexServiceUnavailable()).toBe(false);
   });
 });
 

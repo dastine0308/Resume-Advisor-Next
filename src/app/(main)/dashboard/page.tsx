@@ -1,13 +1,21 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Dropdown, Tabs } from "@/components/ui";
 import { useProfile } from "@/hooks/useProfile";
-import { useResumes, useCoverLetters, useDeleteResume, useDeleteCoverLetter, RESUME_QUERY_KEY, JOB_POSTING_QUERY_KEY } from "@/hooks/useDocuments";
+import {
+  useSuspenseResumes,
+  useSuspenseCoverLetters,
+  useDeleteResume,
+  useDeleteCoverLetter,
+  RESUME_QUERY_KEY,
+  JOB_POSTING_QUERY_KEY,
+} from "@/hooks/useDocuments";
 import { getResumeById, getJobPosting } from "@/lib/api-services";
 import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
+import { DashboardDocumentsSkeleton } from "@/components/ui/Skeleton";
 
 interface Document {
   id: string;
@@ -15,6 +23,20 @@ interface Document {
   type: "resume" | "coverLetter";
   title: string;
   modifiedDate: string;
+}
+
+function getEmptyDocumentsMessage(activeTab: string, totalDocuments: number): string {
+  if (activeTab === "resume") {
+    return totalDocuments > 0
+      ? "No resumes match this filter."
+      : "No resumes yet. Create your first resume!";
+  }
+  if (activeTab === "coverLetter") {
+    return totalDocuments > 0
+      ? "No cover letters match this filter."
+      : "No cover letters yet. Create one from the dashboard.";
+  }
+  return "No documents found. Create your first resume!";
 }
 
 function formatRelativeDate(dateString: string): string {
@@ -29,16 +51,17 @@ function formatRelativeDate(dateString: string): string {
   return date.toLocaleDateString(undefined, options);
 }
 
-export default function DashboardPage() {
+function DashboardDocumentsFallback() {
+  return <DashboardDocumentsSkeleton />;
+}
+
+function DashboardDocumentList({ activeTab }: { activeTab: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("all");
   const [deleteConfirm, setDeleteConfirm] = useState<Document | null>(null);
-  const { data: user } = useProfile();
 
-  const { data: resumes = [], isLoading: resumesLoading } = useResumes();
-  const { data: coverLetters = [], isLoading: clLoading } = useCoverLetters();
-  const isLoading = resumesLoading || clLoading;
+  const { data: resumes } = useSuspenseResumes();
+  const { data: coverLetters } = useSuspenseCoverLetters();
 
   const deleteResumeMutation = useDeleteResume();
   const deleteCLMutation = useDeleteCoverLetter();
@@ -117,6 +140,170 @@ export default function DashboardPage() {
     return doc.type === activeTab;
   });
 
+  const deleteConfirmModal = deleteConfirm ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={() => setDeleteConfirm(null)}
+    >
+      <div
+        className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-gray-900">Delete Resume?</h3>
+        <p className="mt-2 text-sm text-gray-600">
+          Deleting{" "}
+          <span className="font-medium">{`"${deleteConfirm.title}"`}</span> will also
+          permanently delete any associated cover letters. This cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+            onClick={handleDeleteConfirm}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (filteredDocuments.length === 0) {
+    return (
+      <>
+        <p className="text-center text-gray-500">
+          {getEmptyDocumentsMessage(activeTab, documents.length)}
+        </p>
+        {deleteConfirmModal}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* Desktop Table */}
+      <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:block">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Type
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Modified
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 bg-white">
+            {filteredDocuments.map((doc) => (
+              <tr
+                key={`${doc.type}-${doc.id}`}
+                className="hover:bg-gray-50"
+                onMouseEnter={() => handlePrefetchResume(doc)}
+                onMouseLeave={handleCancelPrefetch}
+              >
+                <td className="whitespace-nowrap px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <FileTextIcon className="h-5 w-5 text-gray-400" />
+                    <span className="font-medium text-gray-900">{doc.title}</span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  {doc.type === "resume" ? "Resume" : "Cover Letter"}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  {formatRelativeDate(doc.modifiedDate)}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(doc)}
+                      aria-label="Edit"
+                    >
+                      <Pencil1Icon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteClick(doc)}
+                      aria-label="Delete"
+                      className="text-red-600 hover:bg-red-50"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile Card List */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {filteredDocuments.map((doc) => (
+          <div
+            key={`${doc.type}-${doc.id}`}
+            className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+            onMouseEnter={() => handlePrefetchResume(doc)}
+            onMouseLeave={handleCancelPrefetch}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <FileTextIcon className="h-5 w-5 text-gray-400" />
+                <div>
+                  <p className="font-medium text-gray-900">{doc.title}</p>
+                  <p className="text-xs text-gray-500">
+                    {doc.type === "resume" ? "Resume" : "Cover Letter"} ·{" "}
+                    {formatRelativeDate(doc.modifiedDate)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(doc)}
+                  aria-label="Edit"
+                >
+                  <Pencil1Icon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteClick(doc)}
+                  aria-label="Delete"
+                  className="text-red-600 hover:bg-red-50"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {deleteConfirmModal}
+    </>
+  );
+}
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState("all");
+  const { data: user } = useProfile();
+
   return (
     <div className="overflow-auto px-4 py-6 md:px-6 md:py-10">
       <div className="mx-auto w-full max-w-5xl">
@@ -130,7 +317,6 @@ export default function DashboardPage() {
             Manage your resumes and cover letters.
           </p>
         </div>
-        {/* Create New Button */}
         <div className="mb-6 md:mb-8">
           <Dropdown
             trigger={<Button variant="primary">+ Create New</Button>}
@@ -149,7 +335,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Document Tabs */}
         <Tabs
           items={[
             {
@@ -170,165 +355,12 @@ export default function DashboardPage() {
           ]}
         />
 
-        {/* Document Table */}
         <div className="mt-6 md:mt-8">
-          {isLoading ? (
-            <p className="text-center text-gray-500">Loading...</p>
-          ) : filteredDocuments.length === 0 ? (
-            <p className="text-center text-gray-500">
-              No documents found. Create your first resume!
-            </p>
-          ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:block">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Modified
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {filteredDocuments.map((doc) => (
-                      <tr
-                        key={`${doc.type}-${doc.id}`}
-                        className="hover:bg-gray-50"
-                        onMouseEnter={() => handlePrefetchResume(doc)}
-                        onMouseLeave={handleCancelPrefetch}
-                      >
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <FileTextIcon className="h-5 w-5 text-gray-400" />
-                            <span className="font-medium text-gray-900">
-                              {doc.title}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {doc.type === "resume" ? "Resume" : "Cover Letter"}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {formatRelativeDate(doc.modifiedDate)}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(doc)}
-                              aria-label="Edit"
-                            >
-                              <Pencil1Icon className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteClick(doc)}
-                              aria-label="Delete"
-                              className="text-red-600 hover:bg-red-50"
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Card List */}
-              <div className="flex flex-col gap-3 md:hidden">
-                {filteredDocuments.map((doc) => (
-                  <div
-                    key={`${doc.type}-${doc.id}`}
-                    className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-                    onMouseEnter={() => handlePrefetchResume(doc)}
-                    onMouseLeave={handleCancelPrefetch}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <FileTextIcon className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {doc.title}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {doc.type === "resume" ? "Resume" : "Cover Letter"}{" "}
-                            · {formatRelativeDate(doc.modifiedDate)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(doc)}
-                          aria-label="Edit"
-                        >
-                          <Pencil1Icon className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteClick(doc)}
-                          aria-label="Delete"
-                          className="text-red-600 hover:bg-red-50"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          <Suspense fallback={<DashboardDocumentsFallback />}>
+            <DashboardDocumentList activeTab={activeTab} />
+          </Suspense>
         </div>
       </div>
-
-      {deleteConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setDeleteConfirm(null)}
-        >
-          <div
-            className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Delete Resume?</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Deleting{" "}
-              <span className="font-medium">{`"${deleteConfirm.title}"`}</span> will
-              also permanently delete any associated cover letters. This cannot
-              be undone.
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
-                onClick={handleDeleteConfirm}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -6,6 +6,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const ENGLISH_RESUME_GUIDANCE =
+  "Resumes should be written in English for North American job applications.";
+
+export const ENGLISH_RESUME_FORM_HINT =
+  "Write your resume in English for US and Canadian job applications.";
+
+export const ENGLISH_RESUME_FAQ_ANSWER =
+  `${ENGLISH_RESUME_FORM_HINT} US and Canadian employers—and the ATS systems they use—expect English-language resumes. Our AI keyword matching and content enrichment are optimized for English job descriptions.`;
+
 /**
  * LaTeX text validation utilities
  * Detects non-ASCII characters that may cause LaTeX compilation errors
@@ -40,7 +49,7 @@ export function validateLatexText(text: string): {
   return {
     isValid: false,
     invalidChars,
-    message: `Non-English characters detected: "${invalidChars.slice(0, 5).join(", ")}"${invalidChars.length > 5 ? ` and ${invalidChars.length - 5} more` : ""}. Please use English text only for LaTeX compilation.`,
+    message: `Non-English characters detected: "${invalidChars.slice(0, 5).join(", ")}"${invalidChars.length > 5 ? ` and ${invalidChars.length - 5} more` : ""}. ${ENGLISH_RESUME_GUIDANCE}`,
   };
 }
 

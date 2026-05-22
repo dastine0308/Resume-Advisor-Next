@@ -172,7 +172,6 @@ src/
 │   ├── useJobPostingStore.ts  # Zustand store for job posting state
 │   ├── useResumeStore.ts      # Zustand store for resume state
 │   ├── useAuthStore.ts        # Auth session UI state
-│   ├── useCoverLetterStore.ts # Cover letter editor state
 │   └── index.ts               # Store exports
 ├── hooks/
 │   ├── useProfile.ts          # React Query: user profile
@@ -318,7 +317,7 @@ Fetches the current user profile from `GET /api/user`.
 ### Documents (`hooks/useDocuments.ts`)
 
 ```typescript
-const { data: resumes } = useResumes();
+const { data: resumes } = useSuspenseResumes();
 const { data: resume } = useResume(resumeId);
 const { data: job } = useJobPosting(jobId);
 ```

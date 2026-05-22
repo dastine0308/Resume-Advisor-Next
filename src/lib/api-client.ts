@@ -1,5 +1,15 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 const apiClient: AxiosInstance = axios.create({
   baseURL: "/api",
   timeout: 30_000,
@@ -26,7 +36,8 @@ apiClient.interceptors.response.use(
       error.response?.data?.error ||
       error.response?.data?.message ||
       "Request failed";
-    return Promise.reject(new Error(message));
+    const status = error.response?.status ?? 0;
+    return Promise.reject(new ApiRequestError(message, status));
   },
 );
 

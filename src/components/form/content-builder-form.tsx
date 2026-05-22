@@ -16,8 +16,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { DraggableSection } from "@/components/resume/DraggableSection";
-import { useJobPostingStore, useResumeStore } from "@/stores";
-import type { CompileErrorKind } from "@/stores/useResumeStore";
+import { useResumeUIStore } from "@/stores";
+import type { CompileErrorKind } from "@/stores/useResumeUIStore";
+import {
+  useResumeDraftContext,
+  useSetResumeData,
+} from "@/contexts/ResumeDraftContext";
 import { Breadcrumb } from "@/components/resume/Breadcrumb";
 import { FormField } from "@/components/resume/FormField";
 import { VersionHistoryDropdown } from "@/components/resume/VersionHistoryDropdown";
@@ -33,9 +37,9 @@ import {
   generateLaTeXPreviewURL,
   LaTeXServiceBusyError,
   LaTeXServiceUnavailableError,
-  getLatexServiceUnavailable,
   LaTeXValidationError,
 } from "@/lib/latex-client";
+import { LATEX_PREVIEW_UNAVAILABLE_MESSAGE } from "@/lib/latex-preview-feedback";
 import {
   generateLatexFromData,
   validateResumeDataForLatex,
@@ -52,6 +56,10 @@ import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
 import { useAiCredits } from "@/hooks/useAiCredits";
 import { AiCreditHint } from "@/components/ui/AiCreditHint";
 import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
+import {
+  ENGLISH_RESUME_FORM_HINT,
+  ENGLISH_RESUME_GUIDANCE,
+} from "@/lib/utils";
 
 const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 const NORMAL_DEBOUNCE_MS = 700;
@@ -96,15 +104,18 @@ type EnrichRestoreSnapshot = {
 export default function ContentBuilderForm({
   onManualSave,
   isManualSaving,
+  selectedKeywords,
 }: {
   onManualSave?: (versionLabel?: string) => Promise<void>;
   isManualSaving?: boolean;
+  selectedKeywords: string[];
 }) {
   const queryClient = useQueryClient();
   const { canAfford, showUpgradeCta } = useAiCredits();
+  const { draft } = useResumeDraftContext();
+  const setResumeData = useSetResumeData();
+  const resumeData = draft.resumeData;
   const {
-    resumeData,
-    setResumeData,
     latex,
     setLatex,
     mode,
@@ -116,9 +127,7 @@ export default function ContentBuilderForm({
     compileErrorKind,
     setCompileError,
     pdfPreviewURL,
-  } = useResumeStore();
-
-  const { selectedKeywords } = useJobPostingStore();
+  } = useResumeUIStore();
 
   const [breadcrumbItems, setBreadcrumbItems] = useState([
     { id: "education", label: "Education", active: true },
@@ -315,7 +324,7 @@ export default function ContentBuilderForm({
   );
   const deleteWithUndo = useCallback(
     (key: ArraySectionKey, id: string) => {
-      const items = useResumeStore.getState().resumeData[key] as {
+      const items = draft.resumeData[key] as {
         id: string;
         order?: number;
       }[];
@@ -374,7 +383,7 @@ export default function ContentBuilderForm({
 
   const handleApplyLatexToForm = useCallback(() => {
     const previousData = structuredClone(
-      useResumeStore.getState().resumeData,
+      draft.resumeData,
     );
     try {
       const parsed = parseLatexToData(latex);
@@ -410,9 +419,9 @@ export default function ContentBuilderForm({
   }, [enrichRestore, updateExperience, updateProject, updateLeadership]);
 
   const showServiceUnavailableToast = useCallback(() => {
-    toast.warning("Please Contact Support to Activate PDF Preview", {
+    toast.warning(LATEX_PREVIEW_UNAVAILABLE_MESSAGE, {
       id: LATEX_SERVICE_TOAST_ID,
-      duration: Infinity,
+      duration: 8000,
     });
   }, []);
 
@@ -432,13 +441,6 @@ export default function ContentBuilderForm({
   const compileLaTeX = async () => {
     if (compileInFlightRef.current) {
       pendingCompileRef.current = true;
-      return;
-    }
-
-    // Skip compilation if service is already known to be unavailable
-    if (getLatexServiceUnavailable()) {
-      showServiceUnavailableToast();
-      setCompileError("LaTeX service is unavailable", "unavailable");
       return;
     }
 
@@ -476,12 +478,11 @@ export default function ContentBuilderForm({
       if (error instanceof LaTeXValidationError) {
         const fieldInfo = error.fieldName ? ` in "${error.fieldName}"` : "";
         toast.error(`Non-English characters detected${fieldInfo}`, {
-          description:
-            "Please use English text only. LaTeX does not support non-ASCII characters.",
+          description: ENGLISH_RESUME_GUIDANCE,
           duration: 5000,
         });
         setCompileError(
-          `Non-English characters found${fieldInfo}. Please use English text only.`,
+          `Non-English characters found${fieldInfo}. ${ENGLISH_RESUME_GUIDANCE}`,
           "validation",
         );
         return;
@@ -494,7 +495,9 @@ export default function ContentBuilderForm({
       }
 
       if (error instanceof LaTeXServiceUnavailableError) {
-        showServiceUnavailableToast();
+        if (!previousPreviewURL) {
+          showServiceUnavailableToast();
+        }
         setCompileError("LaTeX service is unavailable", "unavailable");
         return;
       }
@@ -748,6 +751,12 @@ export default function ContentBuilderForm({
           <div className="h-full space-y-4 overflow-auto p-4 md:space-y-6 md:p-6 lg:h-full">
             {mode === "form" ? (
               <>
+                <p
+                  className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900"
+                  role="note"
+                >
+                  {ENGLISH_RESUME_FORM_HINT}
+                </p>
                 {/* Education Section */}
                 <section id="education">
                   <h2 className="mb-3 text-sm font-bold text-gray-900 md:mb-4 md:text-base">

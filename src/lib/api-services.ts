@@ -1,4 +1,5 @@
 import { api } from "./api-client";
+import { normalizeCoverLetter } from "@/lib/cover-letter-normalize";
 import type { User } from "@/types/user";
 import type {
   Education,
@@ -255,8 +256,10 @@ export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
  * Get a specific cover letter by ID
  */
 export async function getCoverLetterById(id: string): Promise<CoverLetter> {
-  const res = await api.get<{ success: boolean; data: CoverLetter }>(`/cover-letters/${id}`);
-  return res.data;
+  const res = await api.get<{ success: boolean; data: Record<string, unknown> }>(
+    `/cover-letters/${id}`,
+  );
+  return normalizeCoverLetter(res.data);
 }
 
 /**
