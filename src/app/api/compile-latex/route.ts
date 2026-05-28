@@ -27,9 +27,35 @@ export async function POST(request: NextRequest) {
 
   try {
     console.log("[LaTeX API] Checking LaTeX service readiness...");
-    const healthResponse = await fetch(`${LATEX_SERVICE_URL}/health/ready`, {
-      signal: AbortSignal.timeout(LATEX_HEALTH_TIMEOUT_MS),
-    });
+
+    let healthResponse;
+    try {
+      healthResponse = await fetch(`${LATEX_SERVICE_URL}/health/ready`, {
+        signal: AbortSignal.timeout(LATEX_HEALTH_TIMEOUT_MS),
+      });
+    } catch (healthError) {
+      // Network error or timeout on health check
+      const isTimeout =
+        healthError instanceof Error && healthError.name === "TimeoutError";
+      console.error(
+        "[LaTeX API] Health check failed:",
+        isTimeout ? "timeout" : "network error",
+        healthError,
+      );
+      return NextResponse.json(
+        {
+          error: isTimeout
+            ? "Health check timeout"
+            : "LaTeX service is unavailable",
+          message: isTimeout
+            ? "LaTeX service is not responding. Please try again in a moment."
+            : "Cannot connect to LaTeX service. Please try again later.",
+          retryable: isTimeout,
+        },
+        { status: isTimeout ? 503 : 502 },
+      );
+    }
+
     if (!healthResponse.ok) {
       const isBusy = healthResponse.status === 503;
       console.error(

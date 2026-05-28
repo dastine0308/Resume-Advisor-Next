@@ -30,6 +30,7 @@ import {
 import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
 import { useAiCredits } from "@/hooks/useAiCredits";
 import { AiCreditHint } from "@/components/ui/AiCreditHint";
+import { AiDisclosure } from "@/components/ui/AiDisclosure";
 import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -552,6 +553,7 @@ function CoverLetterForm({
                     {showUpgradeCta("cover_letter") && canGenerate && (
                       <UpgradeProCta action="cover_letter" />
                     )}
+                    <AiDisclosure />
                   </div>
                 </section>
 
