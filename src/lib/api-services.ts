@@ -104,7 +104,9 @@ export interface ResumesResponse {
  * Get all resumes for the current user
  */
 export async function getUserResumes(): Promise<ResumesResponse[]> {
-  const res = await api.get<{ success: boolean; data: ResumesResponse[] }>("/user/resumes");
+  const res = await api.get<{ success: boolean; data: ResumesResponse[] }>(
+    "/user/resumes",
+  );
   return res.data;
 }
 
@@ -155,7 +157,9 @@ export async function createOrUpdateResume(
  * Get a specific resume by ID
  */
 export async function getResumeById(id: string): Promise<ResumeDataResponse> {
-  const res = await api.get<{ success: boolean; data: ResumeDataResponse }>(`/resumes/${id}`);
+  const res = await api.get<{ success: boolean; data: ResumeDataResponse }>(
+    `/resumes/${id}`,
+  );
   return res.data;
 }
 
@@ -164,6 +168,22 @@ export async function getResumeById(id: string): Promise<ResumeDataResponse> {
  */
 export async function deleteResume(id: string): Promise<{ success: boolean }> {
   return api.delete<{ success: boolean }>(`/resumes/${id}`);
+}
+
+/**
+ * Update resume timestamp to mark as recently accessed
+ */
+export async function updateResumeTimestamp(
+  id: string,
+): Promise<{ last_updated: string }> {
+  return api.patch<{ last_updated: string }>(`/resumes/${id}`);
+}
+
+/**
+ * Clone a resume to create a copy with new title
+ */
+export async function cloneResume(id: string): Promise<{ resume_id: string }> {
+  return api.post<{ resume_id: string }>(`/resumes/${id}/clone`);
 }
 
 export interface ResumeVersionListItem {
@@ -187,10 +207,13 @@ export interface RestoreResumeVersionResponse {
 /**
  * List saved versions for a resume (metadata only)
  */
-export async function getResumeVersions(resumeId: string): Promise<ResumeVersionListItem[]> {
-  const res = await api.get<{ success: boolean; data: ResumeVersionListItem[] }>(
-    `/resumes/${resumeId}/versions`,
-  );
+export async function getResumeVersions(
+  resumeId: string,
+): Promise<ResumeVersionListItem[]> {
+  const res = await api.get<{
+    success: boolean;
+    data: ResumeVersionListItem[];
+  }>(`/resumes/${resumeId}/versions`);
   return res.data;
 }
 
@@ -229,15 +252,23 @@ export async function createOrUpdateJobPosting(
  * Get details of a job posting by ID
  */
 export async function getJobPosting(id: string): Promise<JobPostingResponse> {
-  const res = await api.get<{ success: boolean; data: JobPostingResponse }>(`/job-postings/${id}`);
+  const res = await api.get<{ success: boolean; data: JobPostingResponse }>(
+    `/job-postings/${id}`,
+  );
   return res.data;
 }
 
 /**
  * Analyze a job description and extract structured keywords
  */
-export async function analyzeJobDescription(jobDescription: string): Promise<JobPosting> {
-  return api.post<JobPosting>("/ai/analyze-job", { job_description: jobDescription }, { timeout: 60000 });
+export async function analyzeJobDescription(
+  jobDescription: string,
+): Promise<JobPosting> {
+  return api.post<JobPosting>(
+    "/ai/analyze-job",
+    { job_description: jobDescription },
+    { timeout: 60000 },
+  );
 }
 
 /**
@@ -248,7 +279,9 @@ export async function analyzeJobDescription(jobDescription: string): Promise<Job
  * Get all cover letters for the current user
  */
 export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
-  const res = await api.get<{ success: boolean; data: CoverLetterListItem[] }>("/user/cover-letters");
+  const res = await api.get<{ success: boolean; data: CoverLetterListItem[] }>(
+    "/user/cover-letters",
+  );
   return res.data;
 }
 
@@ -256,9 +289,10 @@ export async function getUserCoverLetters(): Promise<CoverLetterListItem[]> {
  * Get a specific cover letter by ID
  */
 export async function getCoverLetterById(id: string): Promise<CoverLetter> {
-  const res = await api.get<{ success: boolean; data: Record<string, unknown> }>(
-    `/cover-letters/${id}`,
-  );
+  const res = await api.get<{
+    success: boolean;
+    data: Record<string, unknown>;
+  }>(`/cover-letters/${id}`);
   return normalizeCoverLetter(res.data);
 }
 
@@ -280,4 +314,22 @@ export async function deleteCoverLetter(
   return api.delete<{ success: boolean; message: string }>(
     `/cover-letters/${id}`,
   );
+}
+
+/**
+ * Update cover letter timestamp to mark as recently accessed
+ */
+export async function updateCoverLetterTimestamp(
+  id: string,
+): Promise<{ last_updated: string }> {
+  return api.patch<{ last_updated: string }>(`/cover-letters/${id}`);
+}
+
+/**
+ * Clone a cover letter to create a copy with new title
+ */
+export async function cloneCoverLetter(
+  id: string,
+): Promise<{ cover_letter_id: string }> {
+  return api.post<{ cover_letter_id: string }>(`/cover-letters/${id}/clone`);
 }

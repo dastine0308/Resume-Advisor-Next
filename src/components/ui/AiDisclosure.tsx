@@ -1,12 +1,13 @@
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface AiDisclosureProps {
   className?: string;
 }
 
-export function AiDisclosure({ className = "" }: AiDisclosureProps) {
+export function AiDisclosure({ className }: AiDisclosureProps) {
   return (
-    <p className={`text-xs text-gray-400 ${className}`}>
+    <p className={cn("text-xs text-gray-400", className)}>
       AI features are powered by{" "}
       <Link
         href="https://groq.com/privacy-policy"

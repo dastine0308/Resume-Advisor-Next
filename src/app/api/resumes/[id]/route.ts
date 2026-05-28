@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth-helper";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
   const { user, supabase, error } = await getAuthUser();
   if (error) return error;
@@ -13,10 +16,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .single();
 
   if (dbError || !data) {
-    return NextResponse.json({ success: false, error: "Resume not found" }, { status: 404 });
+    return NextResponse.json(
+      { success: false, error: "Resume not found" },
+      { status: 404 },
+    );
   }
   if (data.user_id !== user!.id) {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
   }
 
   return NextResponse.json({
@@ -32,7 +41,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
   const { user, supabase, error } = await getAuthUser();
   if (error) return error;
@@ -44,10 +56,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .single();
 
   if (!existing) {
-    return NextResponse.json({ success: false, error: "Resume not found" }, { status: 404 });
+    return NextResponse.json(
+      { success: false, error: "Resume not found" },
+      { status: 404 },
+    );
   }
   if (existing.user_id !== user!.id) {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
   }
 
   await supabase!
@@ -56,10 +74,66 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .contains("content", { resume_id: id })
     .eq("user_id", user!.id);
 
-  const { error: dbError } = await supabase!.from("resumes").delete().eq("id", id);
+  const { error: dbError } = await supabase!
+    .from("resumes")
+    .delete()
+    .eq("id", id);
   if (dbError) {
-    return NextResponse.json({ success: false, error: dbError.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: dbError.message },
+      { status: 500 },
+    );
   }
 
-  return NextResponse.json({ success: true, message: "Resume deleted successfully" });
+  return NextResponse.json({
+    success: true,
+    message: "Resume deleted successfully",
+  });
+}
+
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const { user, supabase, error } = await getAuthUser();
+  if (error) return error;
+
+  const { data: existing } = await supabase!
+    .from("resumes")
+    .select("user_id")
+    .eq("id", id)
+    .single();
+
+  if (!existing) {
+    return NextResponse.json(
+      { success: false, error: "Resume not found" },
+      { status: 404 },
+    );
+  }
+  if (existing.user_id !== user!.id) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabase!
+    .from("resumes")
+    .update({ last_updated: now })
+    .eq("id", id);
+
+  if (updateError) {
+    return NextResponse.json(
+      { success: false, error: updateError.message },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: "Resume updated successfully",
+    last_updated: now,
+  });
 }

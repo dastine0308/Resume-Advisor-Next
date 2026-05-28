@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button, Dropdown, Tabs } from "@/components/ui";
 import { useProfile } from "@/hooks/useProfile";
 import {
@@ -12,9 +13,21 @@ import {
   useDeleteCoverLetter,
   RESUME_QUERY_KEY,
   JOB_POSTING_QUERY_KEY,
+  RESUMES_QUERY_KEY,
+  COVER_LETTERS_QUERY_KEY,
 } from "@/hooks/useDocuments";
-import { getResumeById, getJobPosting } from "@/lib/api-services";
-import { TrashIcon, Pencil1Icon, FileTextIcon } from "@radix-ui/react-icons";
+import {
+  getResumeById,
+  getJobPosting,
+  cloneResume,
+  cloneCoverLetter,
+} from "@/lib/api-services";
+import {
+  TrashIcon,
+  Pencil1Icon,
+  FileTextIcon,
+  CopyIcon,
+} from "@radix-ui/react-icons";
 import { DashboardDocumentsSkeleton } from "@/components/ui/Skeleton";
 
 interface Document {
@@ -25,7 +38,10 @@ interface Document {
   modifiedDate: string;
 }
 
-function getEmptyDocumentsMessage(activeTab: string, totalDocuments: number): string {
+function getEmptyDocumentsMessage(
+  activeTab: string,
+  totalDocuments: number,
+): string {
   if (activeTab === "resume") {
     return totalDocuments > 0
       ? "No resumes match this filter."
@@ -81,7 +97,8 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
       modifiedDate: cl.last_updated,
     }));
     return [...resumeDocs, ...clDocs].sort(
-      (a, b) => new Date(b.modifiedDate).getTime() - new Date(a.modifiedDate).getTime(),
+      (a, b) =>
+        new Date(b.modifiedDate).getTime() - new Date(a.modifiedDate).getTime(),
     );
   }, [resumes, coverLetters]);
 
@@ -122,16 +139,49 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
   };
 
   const handleDeleteClick = (doc: Document) => {
-    if (doc.type === "resume") {
-      setDeleteConfirm(doc);
-    } else {
-      deleteCLMutation.mutate(doc.id);
+    setDeleteConfirm(doc);
+  };
+
+  const handleClone = async (doc: Document) => {
+    try {
+      let clonedId: string;
+
+      if (doc.type === "resume") {
+        const result = await cloneResume(doc.id);
+        clonedId = result.resume_id;
+      } else {
+        const result = await cloneCoverLetter(doc.id);
+        clonedId = result.cover_letter_id;
+      }
+
+      // Invalidate queries to refresh dashboard
+      queryClient.invalidateQueries({ queryKey: RESUMES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: COVER_LETTERS_QUERY_KEY });
+
+      // Show success message
+      toast.success("Document cloned successfully!");
+
+      // Redirect to edit the new document
+      setTimeout(() => {
+        if (doc.type === "resume") {
+          router.push(`/resume?resumeId=${encodeURIComponent(clonedId)}`);
+        } else {
+          router.push(`/cover-letter?id=${encodeURIComponent(clonedId)}`);
+        }
+      }, 500);
+    } catch (error) {
+      console.error("Failed to clone:", error);
+      toast.error("Failed to clone document");
     }
   };
 
   const handleDeleteConfirm = () => {
     if (!deleteConfirm) return;
-    deleteResumeMutation.mutate(deleteConfirm.id);
+    if (deleteConfirm.type === "resume") {
+      deleteResumeMutation.mutate(deleteConfirm.id);
+    } else {
+      deleteCLMutation.mutate(deleteConfirm.id);
+    }
     setDeleteConfirm(null);
   };
 
@@ -149,11 +199,15 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
         className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-gray-900">Delete Resume?</h3>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Delete {deleteConfirm.type === "resume" ? "Resume" : "Cover Letter"}?
+        </h3>
         <p className="mt-2 text-sm text-gray-600">
           Deleting{" "}
-          <span className="font-medium">{`"${deleteConfirm.title}"`}</span> will also
-          permanently delete any associated cover letters. This cannot be undone.
+          <span className="font-medium">{`"${deleteConfirm.title}"`}</span>
+          {deleteConfirm.type === "resume"
+            ? " will also permanently delete any associated cover letters. This cannot be undone."
+            : " cannot be undone."}
         </p>
         <div className="mt-5 flex justify-end gap-3">
           <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
@@ -214,7 +268,9 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
                 <td className="whitespace-nowrap px-6 py-4">
                   <div className="flex items-center gap-3">
                     <FileTextIcon className="h-5 w-5 text-gray-400" />
-                    <span className="font-medium text-gray-900">{doc.title}</span>
+                    <span className="font-medium text-gray-900">
+                      {doc.title}
+                    </span>
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
@@ -232,6 +288,15 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
                       aria-label="Edit"
                     >
                       <Pencil1Icon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleClone(doc)}
+                      aria-label="Clone document"
+                      title="Duplicate to create a copy"
+                    >
+                      <CopyIcon className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -278,6 +343,15 @@ function DashboardDocumentList({ activeTab }: { activeTab: string }) {
                   aria-label="Edit"
                 >
                   <Pencil1Icon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleClone(doc)}
+                  aria-label="Clone document"
+                  title="Duplicate to create a copy"
+                >
+                  <CopyIcon className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
