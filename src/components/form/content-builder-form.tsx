@@ -55,11 +55,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PROFILE_QUERY_KEY } from "@/hooks/useProfile";
 import { useAiCredits } from "@/hooks/useAiCredits";
 import { AiCreditHint } from "@/components/ui/AiCreditHint";
+import { AiDisclosure } from "@/components/ui/AiDisclosure";
 import { UpgradeProCta } from "@/components/ui/UpgradeProCta";
-import {
-  ENGLISH_RESUME_FORM_HINT,
-  ENGLISH_RESUME_GUIDANCE,
-} from "@/lib/utils";
+import { ENGLISH_RESUME_FORM_HINT, ENGLISH_RESUME_GUIDANCE } from "@/lib/utils";
 
 const LATEX_SERVICE_TOAST_ID = "latex-service-unavailable";
 const NORMAL_DEBOUNCE_MS = 700;
@@ -346,9 +344,7 @@ export default function ContentBuilderForm({
           label: "Restore",
           onClick: () => {
             setResumeData((prev) => {
-              const arr = [
-                ...(prev[key] as { id: string; order?: number }[]),
-              ];
+              const arr = [...(prev[key] as { id: string; order?: number }[])];
               if (arr.some((i) => i.id === deleted.id)) return prev;
               arr.splice(index, 0, deleted);
               return {
@@ -382,9 +378,7 @@ export default function ContentBuilderForm({
   );
 
   const handleApplyLatexToForm = useCallback(() => {
-    const previousData = structuredClone(
-      draft.resumeData,
-    );
+    const previousData = structuredClone(draft.resumeData);
     try {
       const parsed = parseLatexToData(latex);
       setResumeData(parsed);
@@ -534,11 +528,7 @@ export default function ContentBuilderForm({
           variant="primary"
           className="inline-flex items-center justify-center gap-2"
           onClick={() =>
-            handleEnrichDescription(
-              sectionType,
-              item.id,
-              item.description,
-            )
+            handleEnrichDescription(sectionType, item.id, item.description)
           }
           disabled={
             enrichingItemId === item.id ||
@@ -1015,6 +1005,7 @@ export default function ContentBuilderForm({
                         </Button>
                       </SortableContext>
                     </DndContext>
+                    <AiDisclosure className="mt-2" />
                   </div>
                 </section>
 
@@ -1132,6 +1123,7 @@ export default function ContentBuilderForm({
                         </Button>
                       </SortableContext>
                     </DndContext>
+                    <AiDisclosure className="mt-2" />
                   </div>
                 </section>
 
@@ -1303,6 +1295,7 @@ export default function ContentBuilderForm({
                         </Button>
                       </SortableContext>
                     </DndContext>
+                    <AiDisclosure className="mt-2" />
                   </div>
                 </section>
               </>
@@ -1330,14 +1323,20 @@ export default function ContentBuilderForm({
                     spellCheck={false}
                   />
                 </div>
-                {compileError && (() => {
-                  const styles = ERROR_KIND_STYLES[compileErrorKind ?? "other"];
-                  return (
-                    <div className={`mt-3 rounded-md border p-3 ${styles.card}`}>
-                      <p className={`text-sm ${styles.text}`}>{compileError}</p>
-                    </div>
-                  );
-                })()}
+                {compileError &&
+                  (() => {
+                    const styles =
+                      ERROR_KIND_STYLES[compileErrorKind ?? "other"];
+                    return (
+                      <div
+                        className={`mt-3 rounded-md border p-3 ${styles.card}`}
+                      >
+                        <p className={`text-sm ${styles.text}`}>
+                          {compileError}
+                        </p>
+                      </div>
+                    );
+                  })()}
               </div>
             )}
           </div>
@@ -1379,7 +1378,7 @@ export default function ContentBuilderForm({
                   <div className="text-xs">Converting LaTeX to PDF</div>
                 </div>
               </div>
-            ) : compileError ? (
+            ) : compileError && compileErrorKind !== "busy" ? (
               <div className="flex h-full items-center justify-center p-4">
                 {(() => {
                   const kind = compileErrorKind ?? "other";
@@ -1390,12 +1389,6 @@ export default function ContentBuilderForm({
                     >
                       <p className="mb-2 font-medium">{styles.title}</p>
                       <p className="text-sm">{compileError}</p>
-                      {kind === "busy" && (
-                        <p className="mt-3 text-xs opacity-80">
-                          Preview will update automatically when you edit your
-                          resume.
-                        </p>
-                      )}
                       {kind === "unavailable" && (
                         <p className="mt-3 text-xs opacity-80">
                           Please contact support to activate PDF preview.
