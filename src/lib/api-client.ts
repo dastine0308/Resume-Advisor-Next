@@ -24,8 +24,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const isLoginPage =
-        typeof window !== "undefined" &&
-        window.location.pathname === "/login";
+        typeof window !== "undefined" && window.location.pathname === "/login";
 
       if (!isLoginPage && typeof window !== "undefined") {
         window.location.href = "/login";
@@ -57,6 +56,9 @@ export const api = {
 
   put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: "PUT", url, data }),
+
+  patch: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    apiRequest<T>({ ...config, method: "PATCH", url, data }),
 
   delete: <T>(url: string, config?: AxiosRequestConfig) =>
     apiRequest<T>({ ...config, method: "DELETE", url }),

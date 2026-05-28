@@ -44,9 +44,7 @@ export async function POST(request: NextRequest) {
       );
       return NextResponse.json(
         {
-          error: isTimeout
-            ? "Health check timeout"
-            : "LaTeX service is unavailable",
+          error: isTimeout ? "service_timeout" : "service_unavailable",
           message: isTimeout
             ? "LaTeX service is not responding. Please try again in a moment."
             : "Cannot connect to LaTeX service. Please try again later.",
